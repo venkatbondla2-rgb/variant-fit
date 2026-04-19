@@ -17,6 +17,8 @@ export function WorkoutLogger() {
   const [sets, setSets] = useState("");
   const [reps, setReps] = useState("");
   const [weight, setWeight] = useState("");
+  const [unit, setUnit] = useState<"lbs" | "kg">("lbs");
+  const [goal, setGoal] = useState<"bulk" | "cut" | "maintain">("maintain");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -68,6 +70,8 @@ export function WorkoutLogger() {
         sets: Number(sets),
         reps: Number(reps),
         weight: Number(weight),
+        unit,
+        goal,
         createdAt: serverTimestamp(),
         // Simple date string for easy filtering "YYYY-MM-DD"
         dateString: new Date().toISOString().split('T')[0]
@@ -128,6 +132,27 @@ export function WorkoutLogger() {
             </button>
           </div>
 
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setGoal("bulk")} 
+              className={`flex-1 py-1 text-xs rounded-lg font-bold border transition-colors ${goal === "bulk" ? "bg-brand text-black border-brand" : "bg-background border-border text-zinc-500"}`}
+            >
+              Bulk
+            </button>
+            <button 
+              onClick={() => setGoal("maintain")} 
+              className={`flex-1 py-1 text-xs rounded-lg font-bold border transition-colors ${goal === "maintain" ? "bg-brand text-black border-brand" : "bg-background border-border text-zinc-500"}`}
+            >
+              Maintain
+            </button>
+            <button 
+              onClick={() => setGoal("cut")} 
+              className={`flex-1 py-1 text-xs rounded-lg font-bold border transition-colors ${goal === "cut" ? "bg-brand text-black border-brand" : "bg-background border-border text-zinc-500"}`}
+            >
+              Cut
+            </button>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
              <div>
                 <label className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase flex mb-1">Sets</label>
@@ -138,14 +163,19 @@ export function WorkoutLogger() {
                 <input type="number" value={reps} onChange={e => setReps(e.target.value)} placeholder="10" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand text-center" />
              </div>
              <div>
-                <label className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase flex mb-1">Weight <span className="opacity-50 ml-1">(lbs)</span></label>
+                <div className="flex items-center justify-between mb-1">
+                   <label className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase flex">Weight</label>
+                   <button onClick={() => setUnit(unit === "lbs" ? "kg" : "lbs")} className="text-[10px] font-bold text-brand uppercase hover:underline">
+                     {unit}
+                   </button>
+                </div>
                 <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="135" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand text-center" />
              </div>
           </div>
 
           <button 
             onClick={handleSave}
-            disabled={!sets || !reps || !weight}
+            disabled={!sets || !reps || !weight || isSaving}
             className="w-full bg-brand text-black font-bold py-2.5 rounded-xl text-sm mt-2 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" /> Save Set

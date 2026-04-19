@@ -14,6 +14,7 @@ export default function MessagesPage() {
   const [activeChat, setActiveChat] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [chatTab, setChatTab] = useState<"primary" | "requests">("primary");
 
   // Load Chats
   useEffect(() => {
@@ -28,6 +29,13 @@ export default function MessagesPage() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // Filter chats by tab (assume chats have status 'pending' if it's a request)
+  // For old chats without status, default to primary.
+  const displayedChats = chats.filter(c => {
+    if (chatTab === "requests") return c.status === "pending";
+    return c.status !== "pending";
+  });
 
   // Load Messages for active chat
   useEffect(() => {
@@ -68,7 +76,25 @@ export default function MessagesPage() {
         {/* Left Side: Conversations List */}
         <div className="w-1/3 min-w-[120px] max-w-[250px] border-r border-border border-dashed flex flex-col bg-background/50">
            <div className="p-4 border-b border-border/50">
-             <h2 className="font-bold mb-3 hidden sm:block">Messages</h2>
+             <div className="flex items-center justify-between mb-3 hidden sm:flex">
+                <h2 className="font-bold">Messages</h2>
+             </div>
+             
+             <div className="flex bg-surface rounded-lg p-1 mb-4 hidden sm:flex">
+               <button 
+                 onClick={() => setChatTab("primary")}
+                 className={`flex-1 text-xs py-1.5 font-bold rounded-md transition-colors ${chatTab === "primary" ? "bg-background text-brand shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}
+               >
+                 Primary
+               </button>
+               <button 
+                 onClick={() => setChatTab("requests")}
+                 className={`flex-1 text-xs py-1.5 font-bold rounded-md transition-colors ${chatTab === "requests" ? "bg-background text-brand shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}
+               >
+                 Requests
+               </button>
+             </div>
+
              <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 hidden sm:block" />
                 <input 
@@ -80,10 +106,10 @@ export default function MessagesPage() {
            </div>
            
            <div className="flex-1 overflow-y-auto">
-             {chats.length === 0 && (
-               <p className="text-xs text-zinc-500 p-4 text-center">No active chats. Start one from a Variant's profile!</p>
+             {displayedChats.length === 0 && (
+               <p className="text-xs text-zinc-500 p-4 text-center">No {chatTab} chats found.</p>
              )}
-             {chats.map((c) => {
+             {displayedChats.map((c) => {
                // Get the other user's name
                const otherUserName = c.participantNames ? c.participantNames.find((n: string) => n !== user.displayName) : "Variant";
                const isActive = activeChat?.id === c.id;

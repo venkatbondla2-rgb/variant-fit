@@ -1,24 +1,58 @@
 "use client";
 
-import { useState } from "react";
-import { Heart, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Heart, MessageCircle, Send } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, increment } from "firebase/firestore";
+import { doc, updateDoc, increment, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
+import { Button } from "@/components/ui/button";
 
 export function PostCard({ post }: { post: any }) {
   const { user } = useAuth();
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
+
+  useEffect(() => {
+    if (!showComments) return;
+    const q = query(
+      collection(db, "posts", post.id, "comments"), 
+      orderBy("createdAt", "asc")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [showComments, post.id]);
 
   const handleLike = async () => {
     if (!user) return;
     setLiked(!liked);
-    // Note: In production we'd track the specific user's like in a subcollection
     const postRef = doc(db, "posts", post.id);
     await updateDoc(postRef, {
       likesCount: increment(liked ? -1 : 1)
     });
+  };
+
+  const handlePostComment = async () => {
+    if (!newComment.trim() || !user) return;
+    setIsPostingComment(true);
+    try {
+      await addDoc(collection(db, "posts", post.id, "comments"), {
+        userId: user.uid,
+        username: user.displayName || "Variant",
+        text: newComment,
+        createdAt: serverTimestamp()
+      });
+      setNewComment("");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsPostingComment(false);
+    }
   };
 
   return (
@@ -65,8 +99,35 @@ export function PostCard({ post }: { post: any }) {
       </div>
 
       {showComments && (
-        <div className="mt-4 pt-4 border-t border-border">
-          <p className="text-xs text-zinc-500 text-center">Comments coming soon...</p>
+        <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+          
+          <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-2">
+             {comments.length === 0 && <p className="text-xs text-zinc-500">No comments yet. Be the first!</p>}
+             {comments.map(c => (
+               <div key={c.id} className="flex gap-2">
+                 <div className="w-6 h-6 rounded-full bg-zinc-800 flex-shrink-0" />
+                 <div className="bg-background rounded-2xl rounded-tl-sm px-3 py-2 border border-border/50 text-sm">
+                    <span className="font-bold text-xs mr-2">{c.username}</span>
+                    <span className="text-zinc-300">{c.text}</span>
+                 </div>
+               </div>
+             ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePostComment()}
+              placeholder="Add a comment..."
+              className="flex-1 bg-background border border-border rounded-full px-4 py-2 text-sm focus:outline-none focus:border-brand"
+            />
+            <Button onClick={handlePostComment} disabled={!newComment.trim() || isPostingComment} size="sm" className="rounded-full bg-brand text-black">
+               <Send className="w-4 h-4 ml-0.5" />
+            </Button>
+          </div>
+
         </div>
       )}
     </div>

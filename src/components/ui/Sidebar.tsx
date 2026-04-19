@@ -15,6 +15,7 @@ export function Sidebar() {
     { href: "/feed", label: "Home Feed", icon: <Home className="w-5 h-5" /> },
     { href: "/messages", label: "Messages", icon: <MessageCircle className="w-5 h-5" /> },
     { href: "/track", label: "Track Progress", icon: <LineChart className="w-5 h-5" /> },
+    { href: "/diet", label: "Diet & Nutrition", icon: <Activity className="w-5 h-5" /> },
     { href: "/train", label: "Train with Variant", icon: <Dumbbell className="w-5 h-5" /> },
     { href: "/challenge", label: "Challenge Variants", icon: <Trophy className="w-5 h-5" /> },
     { href: "/help", label: "Help me Variant", icon: <HelpCircle className="w-5 h-5" /> },

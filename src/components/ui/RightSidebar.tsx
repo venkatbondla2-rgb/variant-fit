@@ -1,19 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { UserPlus } from "lucide-react";
+import { collection, query, limit, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export function RightSidebar() {
   const { user } = useAuth();
   
-  // Dummy suggestions for now
-  const [suggestions, setSuggestions] = useState([
-    { id: "1", username: "AlexFitness" },
-    { id: "2", username: "SarahLifts" },
-    { id: "3", username: "Mike_G" },
-  ]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "users"), limit(10));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usersList = snapshot.docs
+         .map(doc => ({ id: doc.id, ...doc.data() }))
+         .filter(u => u.id !== user.uid)
+         .slice(0, 5);
+      setSuggestions(usersList);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   if (!user) return null;
 
@@ -31,15 +43,20 @@ export function RightSidebar() {
 
       {/* Suggested Variants (Friend Recommendations) */}
       <div className="mb-8 p-5 bg-surface rounded-3xl border border-border shadow-sm">
-        <h3 className="font-bold text-sm mb-4">Suggested Variants</h3>
+        <h3 className="font-bold text-sm mb-4">Live Variants</h3>
         <div className="flex flex-col gap-4">
+          {suggestions.length === 0 && <p className="text-xs text-zinc-500">No other variants yet.</p>}
           {suggestions.map((s) => (
             <div key={s.id} className="flex items-center justify-between group">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-zinc-800" />
-                <span className="text-sm font-medium">{s.username}</span>
+                <div className="w-9 h-9 rounded-full bg-zinc-800 flex-shrink-0 relative">
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-surface"></div>
+                </div>
+                <div className="overflow-hidden">
+                  <span className="text-sm font-medium truncate block">{s.displayName || s.email?.split('@')[0] || "Variant"}</span>
+                </div>
               </div>
-              <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-full group-hover:bg-brand group-hover:text-black group-hover:border-brand transition-all">
+              <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-full group-hover:bg-brand group-hover:text-black group-hover:border-brand transition-all flex-shrink-0">
                 <UserPlus className="w-4 h-4" />
               </Button>
             </div>
