@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Activity, Bell, User, MessageCircle } from "lucide-react";
+import { Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Activity, Bell, User, MessageCircle, Shield } from "lucide-react";
+import { NotificationBadge } from "@/components/ui/NotificationBadge";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
 
   if (!user) return null;
 
@@ -51,13 +52,21 @@ export function Sidebar() {
       <div className="mt-8 border-t border-border pt-4 flex flex-col gap-2">
          <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Account</div>
          <Link href="/notifications" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${pathname === "/notifications" ? "bg-brand/10 text-brand font-medium" : "text-zinc-400 hover:text-white hover:bg-surface"}`}>
-            <Bell className="w-5 h-5"/>
+            <NotificationBadge>
+               <Bell className="w-5 h-5"/>
+            </NotificationBadge>
             <span className="text-sm">Activity</span>
          </Link>
-         <Link href="/profile" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand font-medium" : "text-zinc-400 hover:text-white hover:bg-surface"}`}>
+          <Link href="/profile" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand font-medium" : "text-zinc-400 hover:text-white hover:bg-surface"}`}>
             <User className="w-5 h-5"/>
             <span className="text-sm">Profile</span>
          </Link>
+         {userRole === "admin" && (
+           <Link href="/admin" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${pathname === "/admin" ? "bg-brand/10 text-brand font-medium" : "text-zinc-400 hover:text-white hover:bg-surface"}`}>
+              <Shield className="w-5 h-5"/>
+              <span className="text-sm">Admin Panel</span>
+           </Link>
+         )}
       </div>
     </div>
   );

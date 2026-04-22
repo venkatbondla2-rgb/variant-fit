@@ -4,12 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Menu, X, Activity, Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Bell, User, MessageCircle } from "lucide-react";
+import { Menu, X, Activity, Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Bell, User, MessageCircle, Shield } from "lucide-react";
+import { NotificationBadge } from "@/components/ui/NotificationBadge";
 
 export function MobileHeader() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
 
   if (!user) return null;
 
@@ -85,14 +86,20 @@ export function MobileHeader() {
         <div className="mt-6 border-t border-border pt-6 pb-20 flex flex-col gap-2">
            <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Account</div>
            <Link href="/notifications" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/notifications" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300"}`}>
-              <Bell className="w-5 h-5"/>
+              <NotificationBadge>
+                <Bell className="w-5 h-5"/>
+              </NotificationBadge>
               <span className="text-sm">Activity</span>
            </Link>
-           <Link href="/profile" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300"}`}>
-              <User className="w-5 h-5"/>
-              <span className="text-sm">Profile</span>
-           </Link>
-        </div>
+              <Link href="/profile" onClick={() => setIsOpen(false)} className={`flex items-center gap-4 p-4 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand" : "text-white hover:bg-surface"}`}>
+                <User className="w-6 h-6"/>
+                <span className="font-bold text-lg">Profile</span>
+              </Link>
+              <Link href="/admin" onClick={() => setIsOpen(false)} className={`flex items-center gap-4 p-4 rounded-xl transition-all ${pathname === "/admin" ? "bg-brand/10 text-brand" : "text-white hover:bg-surface"}`}>
+                <Shield className="w-6 h-6"/>
+                <span className="font-bold text-lg">Admin Panel</span>
+              </Link>
+            </nav>
       </div>
     </>
   );

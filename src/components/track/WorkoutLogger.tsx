@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Plus, X, Search } from "lucide-react";
 
-export function WorkoutLogger() {
+export function WorkoutLogger({ selectedDate }: { selectedDate: string }) {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [exercises, setExercises] = useState<{ id: number; name: string }[]>([]);
@@ -74,7 +74,7 @@ export function WorkoutLogger() {
         goal,
         createdAt: serverTimestamp(),
         // Simple date string for easy filtering "YYYY-MM-DD"
-        dateString: new Date().toISOString().split('T')[0]
+        dateString: selectedDate
       });
 
       setSelectedExercise(null);

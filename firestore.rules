@@ -32,12 +32,26 @@ service cloud.firestore {
       allow read, delete: if isOwner(resource.data.userId); 
     }
 
-    // 3. Questions Collection (Help)
+    // 3. Diet Logs Collection
+    match /diet_logs/{logId} {
+      // Users can only read, create, update, and delete their OWN diet logs
+      allow read, create, update, delete: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isOwner(resource.data.userId); 
+    }
+
+    // 4. Questions Collection (Help)
     match /questions/{questionId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated();
       allow delete: if isOwner(resource.data.userId);
+
+      match /replies/{replyId} {
+        allow read: if isAuthenticated();
+        // Allow creating if authenticated and setting self as author
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      }
     }
 
     // 4. Communities Collection (Groups)
@@ -62,11 +76,37 @@ service cloud.firestore {
         allow read, create: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
       }
     }
-
     // 6. Users Collection (Profile)
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId);
+    }
+
+    // 7. Notifications Collection
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Anyone can create a notification (e.g. liking, commenting on someone else's post)
+      allow create: if isAuthenticated();
+      // Only the owner can update (to mark as read) or delete
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    // 8. Training Sessions Collection
+    match /training_sessions/{sessionId} {
+      allow read, update: if isAuthenticated() && (resource.data.hostId == request.auth.uid || resource.data.guestId == request.auth.uid || request.resource.data.hostId == request.auth.uid || request.resource.data.guestId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.hostId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.hostId == request.auth.uid || resource.data.guestId == request.auth.uid);
+    }
+
+    // 9. Admin managed collections
+    match /challenges/{challengeId} {
+      allow read: if isAuthenticated();
+      // Allow any auth user to create/update mock items for testing
+      allow write: if isAuthenticated(); 
+    }
+    
+    match /ads/{adId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
   }
 }

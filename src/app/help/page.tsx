@@ -6,6 +6,7 @@ import { HelpCircle, Send } from "lucide-react";
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
+import { ReplySection } from "@/components/help/ReplySection";
 
 export default function HelpPage() {
   const { user } = useAuth();
@@ -82,9 +83,7 @@ export default function HelpPage() {
                     </div>
                  </div>
                  <p className="text-sm text-zinc-200">{q.content}</p>
-                 <div className="mt-4 pt-3 border-t border-border/50">
-                    <button className="text-xs font-medium text-brand hover:underline">Write a response</button>
-                 </div>
+                 <ReplySection questionId={q.id} questionUserId={q.userId} />
               </div>
             ))
          )}

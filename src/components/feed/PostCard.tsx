@@ -47,6 +47,19 @@ export function PostCard({ post }: { post: any }) {
         text: newComment,
         createdAt: serverTimestamp()
       });
+
+      // Send a notification if the commenter is not the post owner
+      if (user.uid !== post.userId) {
+        await addDoc(collection(db, "notifications"), {
+          userId: post.userId,
+          type: "comment",
+          message: `${user.displayName || "Someone"} commented on your post.`,
+          link: `/feed`, // Just linking to feed since we don't have individual post pages yet
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+
       setNewComment("");
     } catch (err) {
       console.error(err);
