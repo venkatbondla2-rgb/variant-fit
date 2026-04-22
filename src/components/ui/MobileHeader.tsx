@@ -91,15 +91,17 @@ export function MobileHeader() {
               </NotificationBadge>
               <span className="text-sm">Activity</span>
            </Link>
-              <Link href="/profile" onClick={() => setIsOpen(false)} className={`flex items-center gap-4 p-4 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand" : "text-white hover:bg-surface"}`}>
-                <User className="w-6 h-6"/>
-                <span className="font-bold text-lg">Profile</span>
-              </Link>
-              <Link href="/admin" onClick={() => setIsOpen(false)} className={`flex items-center gap-4 p-4 rounded-xl transition-all ${pathname === "/admin" ? "bg-brand/10 text-brand" : "text-white hover:bg-surface"}`}>
-                <Shield className="w-6 h-6"/>
-                <span className="font-bold text-lg">Admin Panel</span>
-              </Link>
-            </nav>
+           <Link href="/profile" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300 hover:text-white"}`}>
+              <User className="w-5 h-5"/>
+              <span className="text-sm">Profile</span>
+           </Link>
+           {userRole === "admin" && (
+             <Link href="/admin" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/admin" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300 hover:text-white"}`}>
+                <Shield className="w-5 h-5"/>
+                <span className="text-sm">Admin Panel</span>
+             </Link>
+           )}
+        </div>
       </div>
     </>
   );

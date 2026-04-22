@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, query, onSnapshot, addDoc, serverTimestamp, getDocs, doc, deleteDoc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Shield, Plus, Trash2, LayoutDashboard, Target } from "lucide-react";
+import { Shield, LayoutDashboard, Target, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminPage() {
-  const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const { user, userRole, loading } = useAuth();
   
   const [activeTab, setActiveTab] = useState<"ads" | "challenges">("ads");
   const [ads, setAds] = useState<any[]>([]);
@@ -23,16 +22,7 @@ export default function AdminPage() {
   const [challengeDesc, setChallengeDesc] = useState("");
 
   useEffect(() => {
-    if (!user) return;
-    const fetchRole = async () => {
-       const userDoc = await getDoc(doc(db, "users", user.uid));
-       setIsAdmin(userDoc.data()?.role === "admin");
-    };
-    fetchRole();
-  }, [user]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
+    if (userRole !== "admin") return;
     const unsubAds = onSnapshot(collection(db, "ads"), snap => {
       setAds(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
@@ -44,13 +34,7 @@ export default function AdminPage() {
       unsubAds();
       unsubChal();
     };
-  }, [isAdmin]);
-
-  const makeMeAdmin = async () => {
-    if (!user) return;
-    await updateDoc(doc(db, "users", user.uid), { role: "admin" });
-    setIsAdmin(true);
-  };
+  }, [userRole]);
 
   const handleCreateAd = async () => {
     if (!adImageUrl || !adLink) return;
@@ -85,15 +69,14 @@ export default function AdminPage() {
     await deleteDoc(doc(db, "challenges", id));
   };
 
-  if (!user || isAdmin === null) return <div className="text-center pt-20">Loading...</div>;
+  if (loading || !user) return <div className="text-center pt-20">Loading...</div>;
 
-  if (isAdmin === false) {
+  if (userRole !== "admin") {
      return (
        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
          <Shield className="w-16 h-16 text-red-500" />
          <h1 className="text-2xl font-bold">Access Denied</h1>
          <p className="text-zinc-400">You must be an admin to view this panel.</p>
-         <Button onClick={makeMeAdmin} className="mt-4 bg-brand text-black">Dev Tool: Make Me Admin</Button>
        </div>
      );
   }
