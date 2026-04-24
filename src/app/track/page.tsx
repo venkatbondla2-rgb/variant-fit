@@ -27,7 +27,7 @@ export default function TrackPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setWorkouts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setWorkouts(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })));
     });
 
     return () => unsubscribe();

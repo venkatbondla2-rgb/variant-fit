@@ -14,7 +14,7 @@ export default function ChallengePage() {
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(collection(db, "challenges"), snap => {
-       setChallenges(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+       setChallenges(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
     });
     return () => unsub();
   }, [user]);

@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDocs, addDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity } from "lucide-react";
+import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity, UserPlus, UserCheck, Dumbbell } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -12,6 +12,8 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -27,6 +29,27 @@ export default function NotificationsPage() {
     });
 
     return () => unsubscribe();
+  }, [user]);
+
+  // Load pending friend requests
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadRequests = async () => {
+      try {
+        const q = query(
+          collection(db, "friend_requests"),
+          where("toId", "==", user.uid),
+          where("status", "==", "pending")
+        );
+        const snap = await getDocs(q);
+        setPendingRequests(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      } catch (err) {
+        console.error("Error loading friend requests:", err);
+      }
+    };
+
+    loadRequests();
   }, [user]);
 
   const markAsRead = async (id: string) => {
@@ -51,6 +74,58 @@ export default function NotificationsPage() {
     }
   };
 
+  const acceptFriendRequest = async (request: any) => {
+    if (!user) return;
+    setAcceptingId(request.id);
+    try {
+      // Update request status
+      await updateDoc(doc(db, "friend_requests", request.id), {
+        status: "accepted"
+      });
+
+      // Add each other to friends arrays
+      await updateDoc(doc(db, "users", user.uid), {
+        friends: arrayUnion(request.fromId)
+      });
+      await updateDoc(doc(db, "users", request.fromId), {
+        friends: arrayUnion(user.uid)
+      });
+
+      // Notify sender
+      await addDoc(collection(db, "notifications"), {
+        userId: request.fromId,
+        type: "friend_accepted",
+        message: `${user.displayName || "Someone"} accepted your friend request!`,
+        link: `/profile/${user.uid}`,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+
+      // Remove from local list
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to accept request.");
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  const declineFriendRequest = async (request: any) => {
+    if (!user) return;
+    setAcceptingId(request.id);
+    try {
+      await updateDoc(doc(db, "friend_requests", request.id), {
+        status: "declined"
+      });
+      setPendingRequests(prev => prev.filter(r => r.id !== request.id));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
   if (!user) return null;
 
   const getIcon = (type: string) => {
@@ -58,6 +133,9 @@ export default function NotificationsPage() {
       case "comment": return <MessageCircle className="w-5 h-5 text-blue-400" />;
       case "reply": return <MessageCircle className="w-5 h-5 text-green-400" />;
       case "like": return <Heart className="w-5 h-5 text-red-500" />;
+      case "friend_request": return <UserPlus className="w-5 h-5 text-brand" />;
+      case "friend_accepted": return <UserCheck className="w-5 h-5 text-green-500" />;
+      case "train_request": return <Dumbbell className="w-5 h-5 text-brand" />;
       default: return <BellRing className="w-5 h-5 text-brand" />;
     }
   };
@@ -76,9 +154,54 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Pending Friend Requests Section */}
+      {pendingRequests.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-brand" /> Friend Requests ({pendingRequests.length})
+          </h2>
+          <div className="flex flex-col gap-3">
+            {pendingRequests.map(req => (
+              <div key={req.id} className="flex items-center justify-between p-4 bg-brand/10 border border-brand/30 rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-surface border-2 border-brand flex items-center justify-center">
+                    <UserPlus className="w-5 h-5 text-brand" />
+                  </div>
+                  <div>
+                    <Link href={`/profile/${req.fromId}`} className="font-bold text-sm hover:text-brand transition-colors">
+                      {req.fromName || "Someone"}
+                    </Link>
+                    <p className="text-xs text-zinc-400">Wants to be your friend</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => acceptFriendRequest(req)} 
+                    disabled={acceptingId === req.id}
+                    size="sm"
+                    className="bg-brand text-black hover:brightness-110 font-bold gap-1"
+                  >
+                    <UserCheck className="w-4 h-4" /> Accept
+                  </Button>
+                  <Button 
+                    onClick={() => declineFriendRequest(req)} 
+                    disabled={acceptingId === req.id}
+                    size="sm"
+                    variant="outline" 
+                    className="text-zinc-400 border-border hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50"
+                  >
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-zinc-500 text-center py-10">Loading activity...</p>
-      ) : notifications.length === 0 ? (
+      ) : notifications.length === 0 && pendingRequests.length === 0 ? (
         <div className="flex flex-col flex-1 items-center justify-center opacity-50 py-20">
            <Bell className="w-16 h-16 mb-4 text-zinc-600" />
            <p className="text-zinc-400 text-center">You have no new notifications.</p>
@@ -101,7 +224,7 @@ export default function NotificationsPage() {
                        {n.message}
                     </p>
                     <span className="text-[10px] text-zinc-500">
-                       {n.createdAt?.toDate().toLocaleString(undefined, {
+                       {n.createdAt?.toDate?.()?.toLocaleString(undefined, {
                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                        }) || "Just now"}
                     </span>

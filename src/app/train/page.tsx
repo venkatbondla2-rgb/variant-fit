@@ -6,6 +6,7 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp,
 import { db } from "@/lib/firebase";
 import { Search, Loader2, Dumbbell, UserPlus, Play, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export default function TrainPage() {
   const { user } = useAuth();
@@ -20,24 +21,23 @@ export default function TrainPage() {
   useEffect(() => {
     if (!user) return;
     
-    // Listen for incoming requests or active sessions where user is guest/host
     const qHost = query(collection(db, "training_sessions"), where("hostId", "==", user.uid));
     const qGuest = query(collection(db, "training_sessions"), where("guestId", "==", user.uid));
 
     const unsubscribeHost = onSnapshot(qHost, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
       const active = sessions.find(s => s.status !== "ended");
       if (active) setActiveSession(active);
-      else if (activeSession?.hostId === user.uid) setActiveSession(null); // Clear if host session ended
+      else if (activeSession?.hostId === user.uid) setActiveSession(null);
     });
 
     const unsubscribeGuest = onSnapshot(qGuest, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
       const active = sessions.find(s => s.status === "active");
       const pending = sessions.filter(s => s.status === "pending");
       
       if (active) setActiveSession(active);
-      else if (activeSession?.guestId === user.uid) setActiveSession(null); // Clear if guest session ended
+      else if (activeSession?.guestId === user.uid) setActiveSession(null);
       
       setIncomingRequests(pending);
     });
@@ -52,11 +52,9 @@ export default function TrainPage() {
     if (!usersQuery.trim() || !user) return;
     setIsSearching(true);
     try {
-      // Basic manual lowercase search mockup. For real scale, we'd need Typesense/Algolia or array-contains logic,
-      // but this is an MVP demonstration. We fetch all users and filter locally to bypass complex indexing limits in free tier.
       const snap = await getDocs(collection(db, "users"));
       const users = snap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
         .filter(u => u.id !== user.uid && (
            u.username?.toLowerCase().includes(usersQuery.toLowerCase()) || 
            u.displayName?.toLowerCase().includes(usersQuery.toLowerCase()) ||
@@ -83,7 +81,6 @@ export default function TrainPage() {
          createdAt: serverTimestamp()
        });
        
-       // Send Notification to target
        await addDoc(collection(db, "notifications"), {
          userId: targetUserId,
          type: "train_request",
@@ -208,13 +205,7 @@ export default function TrainPage() {
                  <p className="text-left text-xs font-bold text-zinc-500 uppercase ml-2 mb-1">Results</p>
                  {searchResults.map((su) => (
                     <div key={su.id} className="bg-background border border-border/50 rounded-xl p-3 flex items-center justify-between">
-                       <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-zinc-800 break-words flex-shrink-0" />
-                          <div className="text-left flex flex-col">
-                             <span className="font-bold text-sm leading-tight max-w-[120px] truncate">{su.username || su.email}</span>
-                             <span className="text-[10px] text-zinc-500 max-w-[120px] truncate">{su.email}</span>
-                          </div>
-                       </div>
+                       <UserAvatar userId={su.id} username={su.username || su.email} size="sm" />
                        <Button onClick={() => sendInvitation(su.id, su.username || su.email)} size="sm" variant="outline" className="text-xs h-8 border-brand/40 text-brand hover:bg-brand hover:text-black">
                           Invite
                        </Button>

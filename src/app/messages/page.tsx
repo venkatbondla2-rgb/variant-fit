@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Send, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -19,19 +20,28 @@ export default function MessagesPage() {
   // Load Chats
   useEffect(() => {
     if (!user) return;
+    
+    // Use a simpler query without orderBy to avoid index requirements
     const q = query(
       collection(db, "chats"),
-      where("participants", "array-contains", user.uid),
-      orderBy("lastMessageTime", "desc")
+      where("participants", "array-contains", user.uid)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setChats(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort client-side to avoid needing a composite index
+      chatData.sort((a: any, b: any) => {
+        const aTime = a.lastMessageTime?.toMillis?.() || 0;
+        const bTime = b.lastMessageTime?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      setChats(chatData);
+    }, (error) => {
+      console.error("Chats loading error:", error);
     });
     return () => unsubscribe();
   }, [user]);
 
-  // Filter chats by tab (assume chats have status 'pending' if it's a request)
-  // For old chats without status, default to primary.
+  // Filter chats by tab
   const displayedChats = chats.filter(c => {
     if (chatTab === "requests") return c.status === "pending";
     return c.status !== "pending";
@@ -46,6 +56,8 @@ export default function MessagesPage() {
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Messages loading error:", error);
     });
     return () => unsubscribe();
   }, [activeChat, user]);
@@ -110,16 +122,20 @@ export default function MessagesPage() {
                <p className="text-xs text-zinc-500 p-4 text-center">No {chatTab} chats found.</p>
              )}
              {displayedChats.map((c) => {
-               // Get the other user's name
+               const otherUserId = c.participants?.find((p: string) => p !== user.uid);
                const otherUserName = c.participantNames ? c.participantNames.find((n: string) => n !== user.displayName) : "Variant";
                const isActive = activeChat?.id === c.id;
                
                return (
                <div key={c.id} onClick={() => setActiveChat(c)} className={`p-4 border-b border-border/20 cursor-pointer transition-colors ${isActive ? "bg-brand/10 border-l-2 border-l-brand" : "hover:bg-surface-hover"}`}>
                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-2 sm:gap-3">
-                   <div className="w-10 h-10 rounded-full bg-zinc-800 flex-shrink-0 relative">
-                     <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-surface"></div>
-                   </div>
+                   {otherUserId ? (
+                     <UserAvatar userId={otherUserId} username={otherUserName || "Variant"} size="sm" showName={false} />
+                   ) : (
+                     <div className="w-10 h-10 rounded-full bg-zinc-800 flex-shrink-0 relative">
+                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-surface"></div>
+                     </div>
+                   )}
                    <div className="hidden sm:block overflow-hidden">
                      <h4 className="font-bold text-sm truncate">{otherUserName}</h4>
                      <p className="text-xs text-zinc-500 truncate">{c.lastMessageText || "New Chat"}</p>
@@ -141,13 +157,18 @@ export default function MessagesPage() {
                {/* Chat Header */}
                <div className="p-4 border-b border-border/50 flex items-center justify-between bg-surface/50 backdrop-blur">
                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-zinc-800" />
-                    <div>
-                      <h3 className="font-bold text-sm">
-                        {activeChat.participantNames?.find((n: string) => n !== user.displayName) || "Variant"}
-                      </h3>
-                      <p className="text-[10px] text-green-500">Active Chat</p>
-                    </div>
+                    {(() => {
+                      const otherUserId = activeChat.participants?.find((p: string) => p !== user.uid);
+                      const otherName = activeChat.participantNames?.find((n: string) => n !== user.displayName) || "Variant";
+                      return otherUserId ? (
+                        <UserAvatar userId={otherUserId} username={otherName} size="sm" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-zinc-800" />
+                          <span className="font-bold text-sm">{otherName}</span>
+                        </div>
+                      );
+                    })()}
                  </div>
                </div>
 
@@ -159,7 +180,7 @@ export default function MessagesPage() {
                     <div key={m.id} className={`max-w-[80%] shadow-sm px-4 py-2 ${isMe ? "self-end bg-brand text-black rounded-2xl rounded-tr-sm" : "self-start bg-surface border border-border rounded-2xl rounded-tl-sm"}`}>
                        <p className="text-sm">{m.text}</p>
                        <span className={`text-[10px] mt-1 block ${isMe ? "text-black/60 text-right right-0" : "text-zinc-500"}`}>
-                         {m.createdAt?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || "Just now"}
+                         {m.createdAt?.toDate?.()?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || "Just now"}
                        </span>
                     </div>
                   )})}

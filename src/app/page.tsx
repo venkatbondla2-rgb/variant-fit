@@ -1,7 +1,31 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, Activity } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/feed");
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Activity className="w-10 h-10 text-brand animate-pulse" />
+      </div>
+    );
+  }
+
+  if (user) return null; // Will redirect
+
   return (
     <div className="flex flex-col flex-1 items-center justify-center min-h-screen p-6 relative overflow-hidden">
       {/* Background decoration */}

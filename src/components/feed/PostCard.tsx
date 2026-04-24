@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, increment, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export function PostCard({ post }: { post: any }) {
   const { user } = useAuth();
@@ -54,7 +55,7 @@ export function PostCard({ post }: { post: any }) {
           userId: post.userId,
           type: "comment",
           message: `${user.displayName || "Someone"} commented on your post.`,
-          link: `/feed`, // Just linking to feed since we don't have individual post pages yet
+          link: `/feed`,
           read: false,
           createdAt: serverTimestamp(),
         });
@@ -71,9 +72,9 @@ export function PostCard({ post }: { post: any }) {
   return (
     <div className="bg-surface rounded-3xl p-6 border border-border">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-zinc-800" />
+        <UserAvatar userId={post.userId} username={post.username} size="md" showName={false} />
         <div>
-          <h3 className="font-bold text-sm">{post.username}</h3>
+          <UserAvatar userId={post.userId} username={post.username} size="md" showName={true} className="[&>div]:hidden" />
           <p className="text-xs text-zinc-500">
             {post.createdAt?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || "Just now"}
           </p>
@@ -118,10 +119,10 @@ export function PostCard({ post }: { post: any }) {
              {comments.length === 0 && <p className="text-xs text-zinc-500">No comments yet. Be the first!</p>}
              {comments.map(c => (
                <div key={c.id} className="flex gap-2">
-                 <div className="w-6 h-6 rounded-full bg-zinc-800 flex-shrink-0" />
+                 <UserAvatar userId={c.userId} username={c.username} size="sm" showName={false} />
                  <div className="bg-background rounded-2xl rounded-tl-sm px-3 py-2 border border-border/50 text-sm">
-                    <span className="font-bold text-xs mr-2">{c.username}</span>
-                    <span className="text-zinc-300">{c.text}</span>
+                    <UserAvatar userId={c.userId} username={c.username} size="sm" showName={true} className="[&>div]:hidden inline-flex mb-0.5" />
+                    <span className="text-zinc-300 ml-1">{c.text}</span>
                  </div>
                </div>
              ))}

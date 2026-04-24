@@ -22,7 +22,7 @@ export function MobileHeader() {
     { href: "/train", label: "Train with Variant", icon: <Dumbbell className="w-5 h-5" /> },
     { href: "/challenge", label: "Challenge Variants", icon: <Trophy className="w-5 h-5" /> },
     { href: "/help", label: "Help me Variant", icon: <HelpCircle className="w-5 h-5" /> },
-    { href: "/community/create", label: "Create Community", icon: <Users className="w-5 h-5" /> },
+    { href: "/community", label: "Community", icon: <Users className="w-5 h-5" /> },
   ];
 
   return (

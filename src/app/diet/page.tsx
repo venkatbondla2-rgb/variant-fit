@@ -38,7 +38,7 @@ export default function DietPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setDietLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setDietLogs(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })));
     });
 
     return () => unsubscribe();

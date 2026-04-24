@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Image as ImageIcon, Video, Send } from "lucide-react";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export function CreatePost() {
   const { user } = useAuth();
@@ -84,7 +85,7 @@ export function CreatePost() {
   return (
     <div className="bg-surface rounded-3xl p-4 sm:p-6 mb-6 border border-border shadow-md">
       <div className="flex gap-4">
-        <div className="w-10 h-10 rounded-full bg-zinc-800 flex-shrink-0" />
+        <UserAvatar userId={user.uid} username={user.displayName || "User"} showName={false} size="md" />
         <div className="flex-1">
           <textarea
             value={content}
