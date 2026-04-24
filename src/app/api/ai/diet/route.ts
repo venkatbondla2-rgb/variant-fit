@@ -25,7 +25,7 @@ so it looks good in a raw text box.`;
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "llama3-8b-8192", // Groq free lightning fast model
+        model: "llama-3.1-8b-instant", // Updated: llama3-8b-8192 was deprecated
         messages: [
           { role: "system", content: systemMessage },
           { role: "user", content: prompt }
@@ -35,15 +35,17 @@ so it looks good in a raw text box.`;
     });
 
     if (!res.ok) {
-      throw new Error(`Groq API Error: ${res.statusText}`);
+      const errorBody = await res.text();
+      console.error("Groq API error response:", errorBody);
+      throw new Error(`Groq API Error: ${res.status} ${res.statusText}`);
     }
 
     const data = await res.json();
     const recommendation = data.choices[0]?.message?.content || "No recommendation generated.";
 
     return NextResponse.json({ recommendation });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed to generate diet plan" }, { status: 500 });
+  } catch (error: any) {
+    console.error("AI Diet Error:", error.message || error);
+    return NextResponse.json({ error: error.message || "Failed to generate diet plan" }, { status: 500 });
   }
 }
