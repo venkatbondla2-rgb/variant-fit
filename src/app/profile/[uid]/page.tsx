@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X } from "lucide-react";
+import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/feed/PostCard";
 import Link from "next/link";
@@ -288,6 +288,37 @@ export default function PublicProfilePage() {
           {friendStatus === "friends" && (
             <Button variant="outline" disabled className="self-start gap-2 text-green-500 border-green-500/30">
               <UserCheck className="w-4 h-4" /> Friends
+            </Button>
+          )}
+
+          {/* Message Button - always visible on other profiles */}
+          {user && user.uid !== uid && (
+            <Button 
+              variant="outline" 
+              className="self-start gap-2 mt-2"
+              onClick={async () => {
+                // Check for existing chat
+                const { getDocs: gd, collection: col, query: q, where: w, addDoc: ad, serverTimestamp: st } = await import("firebase/firestore");
+                const chatsSnap = await gd(q(col(db, "chats"), w("participants", "array-contains", user.uid)));
+                const existing = chatsSnap.docs.find(d => (d.data() as any).participants?.includes(uid));
+                if (existing) {
+                  router.push("/messages");
+                  return;
+                }
+                // Create new chat
+                const isFriend = friendStatus === "friends";
+                await ad(col(db, "chats"), {
+                  participants: [user.uid, uid],
+                  participantNames: [user.displayName || "Variant", profileData?.username || "Variant"],
+                  status: isFriend ? "active" : "pending",
+                  lastMessageText: "",
+                  lastMessageTime: st(),
+                  createdAt: st(),
+                });
+                router.push("/messages");
+              }}
+            >
+              <MessageCircle className="w-4 h-4" /> Message
             </Button>
           )}
         </div>

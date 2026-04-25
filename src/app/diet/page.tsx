@@ -34,6 +34,7 @@ export default function DietPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiParsedMacros, setAiParsedMacros] = useState<any>(null);
   const [isApplyingAi, setIsApplyingAi] = useState(false);
 
   useEffect(() => {
@@ -106,6 +107,7 @@ export default function DietPage() {
   const generateDiet = async () => {
     if (!aiPrompt.trim()) return;
     setIsGenerating(true);
+    setAiParsedMacros(null);
     try {
       const res = await fetch('/api/ai/diet', {
         method: 'POST',
@@ -117,6 +119,9 @@ export default function DietPage() {
         alert(`AI Error: ${data.error}`);
       } else {
         setAiResponse(data.recommendation);
+        if (data.parsedMacros) {
+          setAiParsedMacros(data.parsedMacros);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -132,10 +137,11 @@ export default function DietPage() {
     
     setIsApplyingAi(true);
     try {
-      const parsedGoals = { dailyCalories: 2200, dailyProtein: 180, dailyCarbs: 220, dailyFat: 70 }; 
+      // Use AI-parsed macros if available, otherwise use defaults
+      const goals = aiParsedMacros || { dailyCalories: 2200, dailyProtein: 180, dailyCarbs: 220, dailyFat: 70 };
       const userRef = doc(db, "users", user.uid);
-      await setDoc(userRef, { dietGoals: parsedGoals }, { merge: true });
-      alert("Your Daily Goals have been updated!");
+      await setDoc(userRef, { dietGoals: goals }, { merge: true });
+      alert(`Diet Updated!\nCalories: ${goals.dailyCalories}\nProtein: ${goals.dailyProtein}g\nCarbs: ${goals.dailyCarbs}g\nFat: ${goals.dailyFat}g`);
       setActiveTab("tracker");
     } catch (err) {
       console.error(err);

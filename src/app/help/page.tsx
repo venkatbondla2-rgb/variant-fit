@@ -7,6 +7,7 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { ReplySection } from "@/components/help/ReplySection";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export default function HelpPage() {
   const { user } = useAuth();
@@ -74,11 +75,11 @@ export default function HelpPage() {
             questions.map(q => (
               <div key={q.id} className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-zinc-800" />
+                    <UserAvatar userId={q.userId} username={q.username} size="sm" showName={false} />
                     <div>
-                      <h4 className="font-bold text-sm">{q.username}</h4>
+                      <UserAvatar userId={q.userId} username={q.username} size="sm" showName={true} className="[&>div]:hidden" />
                       <p className="text-[10px] text-zinc-500">
-                        {q.createdAt?.toDate().toLocaleDateString() || "Just now"}
+                        {q.createdAt?.toDate?.()?.toLocaleDateString() || "Just now"}
                       </p>
                     </div>
                  </div>

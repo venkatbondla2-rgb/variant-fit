@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, Globe, LayoutList, ArrowLeft, Send, MessageCircle } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { NestedReplies } from "@/components/shared/NestedReplies";
 
 export default function CommunityPage() {
   const { user } = useAuth();
@@ -206,6 +207,15 @@ export default function CommunityPage() {
                       </span>
                     </div>
                     <p className="text-sm text-zinc-200 mt-1">{post.content}</p>
+                    
+                    {/* Nested replies for community post */}
+                    <NestedReplies
+                      collectionPath={`communities/${selectedCommunity.id}/posts/${post.id}/replies`}
+                      notifyUserId={post.userId}
+                      notifyType="community_reply"
+                      notifyLink="/community"
+                      placeholder="Reply to this post..."
+                    />
                   </div>
                 </div>
               </div>
