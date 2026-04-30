@@ -15,18 +15,52 @@ export async function POST(request: Request) {
 
     const systemMessage = `You are Variant AI, an elite fitness nutritionist and diet planner.
 
-IMPORTANT: Start your response with a MACRO SUMMARY line in exactly this format:
-MACROS: [calories] cal, [protein]g protein, [carbs]g carbs, [fat]g fat
+You MUST respond with ONLY valid JSON and no other text. No markdown, no explanation, no code fences.
 
-Then provide a clear, structured meal plan organized by:
-- Breakfast
-- Lunch  
-- Mid-Snack
-- Dinner
+The JSON must follow this exact schema:
+{
+  "summary": "Brief 1-2 sentence summary of the plan",
+  "dailyTotals": {
+    "calories": <number>,
+    "protein_g": <number>,
+    "carbs_g": <number>,
+    "fat_g": <number>
+  },
+  "meals": [
+    {
+      "mealCategory": "breakfast",
+      "items": [
+        {
+          "name": "Food item name",
+          "calories": <number>,
+          "protein_g": <number>,
+          "carbs_g": <number>,
+          "fat_g": <number>
+        }
+      ]
+    },
+    {
+      "mealCategory": "lunch",
+      "items": [...]
+    },
+    {
+      "mealCategory": "mid-snack",
+      "items": [...]
+    },
+    {
+      "mealCategory": "dinner",
+      "items": [...]
+    }
+  ]
+}
 
-For each meal, list the food items with approximate calories and macros.
-Do not use markdown formatting like **bold** or asterisks.
-Use clean spacing so it looks good in a raw text box.`;
+Rules:
+- Always include exactly 4 meal categories: breakfast, lunch, mid-snack, dinner
+- Each meal should have 2-4 food items
+- All macro numbers should be realistic integers
+- The dailyTotals should match the sum of all items
+- Tailor the plan to the user's goals, allergies, and preferences
+- Respond with ONLY the JSON object, nothing else`;
 
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -40,7 +74,8 @@ Use clean spacing so it looks good in a raw text box.`;
           { role: "system", content: systemMessage },
           { role: "user", content: prompt }
         ],
-        temperature: 0.7
+        temperature: 0.5,
+        response_format: { type: "json_object" }
       })
     });
 
@@ -51,21 +86,53 @@ Use clean spacing so it looks good in a raw text box.`;
     }
 
     const data = await res.json();
-    const recommendation = data.choices[0]?.message?.content || "No recommendation generated.";
+    const rawContent = data.choices[0]?.message?.content || "";
 
-    // Try to parse macros from AI response
+    // Parse the structured JSON response
+    let structuredPlan = null;
+    let recommendation = "";
     let parsedMacros = null;
-    const macroMatch = recommendation.match(/MACROS:\s*(\d+)\s*cal.*?(\d+)g\s*protein.*?(\d+)g\s*carbs.*?(\d+)g\s*fat/i);
-    if (macroMatch) {
-      parsedMacros = {
-        dailyCalories: parseInt(macroMatch[1]),
-        dailyProtein: parseInt(macroMatch[2]),
-        dailyCarbs: parseInt(macroMatch[3]),
-        dailyFat: parseInt(macroMatch[4]),
-      };
+
+    try {
+      structuredPlan = JSON.parse(rawContent);
+      
+      // Build a human-readable text version
+      recommendation = `${structuredPlan.summary || "Your Custom Diet Plan"}\n\n`;
+      recommendation += `Daily Totals: ${structuredPlan.dailyTotals?.calories || 0} cal, ${structuredPlan.dailyTotals?.protein_g || 0}g protein, ${structuredPlan.dailyTotals?.carbs_g || 0}g carbs, ${structuredPlan.dailyTotals?.fat_g || 0}g fat\n\n`;
+
+      if (structuredPlan.meals) {
+        for (const meal of structuredPlan.meals) {
+          const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
+          recommendation += `--- ${catLabel} ---\n`;
+          if (meal.items) {
+            for (const item of meal.items) {
+              recommendation += `  ${item.name} — ${item.calories} cal | ${item.protein_g}g P | ${item.carbs_g}g C | ${item.fat_g}g F\n`;
+            }
+          }
+          recommendation += "\n";
+        }
+      }
+
+      // Extract daily totals for macro goals
+      if (structuredPlan.dailyTotals) {
+        parsedMacros = {
+          dailyCalories: structuredPlan.dailyTotals.calories,
+          dailyProtein: structuredPlan.dailyTotals.protein_g,
+          dailyCarbs: structuredPlan.dailyTotals.carbs_g,
+          dailyFat: structuredPlan.dailyTotals.fat_g,
+        };
+      }
+    } catch (parseErr) {
+      // If JSON parsing fails, use raw text as fallback
+      console.error("Failed to parse structured AI response:", parseErr);
+      recommendation = rawContent;
     }
 
-    return NextResponse.json({ recommendation, parsedMacros });
+    return NextResponse.json({ 
+      recommendation, 
+      parsedMacros,
+      structuredPlan 
+    });
   } catch (error: any) {
     console.error("AI Diet Error:", error.message || error);
     return NextResponse.json({ error: error.message || "Failed to generate diet plan" }, { status: 500 });

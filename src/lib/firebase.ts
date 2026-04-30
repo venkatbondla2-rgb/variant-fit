@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyBIdrzdu_ObCZCtjFGZYd399bp_kKtyI3M",
@@ -20,6 +21,9 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Google Auth Provider
+const googleProvider = new GoogleAuthProvider();
+
 // Initialize Analytics conditionally (only on the client side)
 let analytics: ReturnType<typeof getAnalytics> | null = null;
 if (typeof window !== "undefined") {
@@ -30,4 +34,4 @@ if (typeof window !== "undefined") {
   });
 }
 
-export { app, auth, db, analytics };
+export { app, auth, db, analytics, googleProvider };

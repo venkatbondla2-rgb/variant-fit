@@ -5,17 +5,61 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Image as ImageIcon, Video, Send } from "lucide-react";
+import { Image as ImageIcon, Video, Send, AlertCircle } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+
+const MAX_VIDEO_DURATION = 30; // seconds
 
 export function CreatePost() {
   const { user } = useAuth();
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isPosting, setIsPosting] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
+
+  const validateVideo = (videoFile: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(video.src);
+        if (video.duration > MAX_VIDEO_DURATION) {
+          setVideoError(`Video must be ${MAX_VIDEO_DURATION} seconds or shorter. Your video is ${Math.round(video.duration)}s.`);
+          resolve(false);
+        } else {
+          setVideoError(null);
+          resolve(true);
+        }
+      };
+      video.onerror = () => {
+        setVideoError("Could not read video file.");
+        resolve(false);
+      };
+      video.src = URL.createObjectURL(videoFile);
+    });
+  };
+
+  const handleFileSelect = async (selectedFile: File | null) => {
+    if (!selectedFile) {
+      setFile(null);
+      setVideoError(null);
+      return;
+    }
+
+    if (selectedFile.type.startsWith("video/")) {
+      const isValid = await validateVideo(selectedFile);
+      if (!isValid) {
+        setFile(null);
+        return;
+      }
+    }
+
+    setVideoError(null);
+    setFile(selectedFile);
+  };
 
   const handlePost = async () => {
     if (!content.trim() && !file) return;
@@ -74,6 +118,7 @@ export function CreatePost() {
 
       setContent("");
       setFile(null);
+      setVideoError(null);
     } catch (error) {
       console.error("Error creating post", error);
       alert("Something went wrong uploading the post.");
@@ -94,15 +139,25 @@ export function CreatePost() {
             className="w-full bg-transparent border-none focus:outline-none resize-none text-foreground placeholder:text-zinc-500 mb-2 h-auto min-h-[60px]"
           />
           
+          {/* Video Duration Error */}
+          {videoError && (
+            <div className="mb-3 flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm p-3 rounded-xl">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {videoError}
+            </div>
+          )}
+
           {file && (
-            <div className="mb-4 relative w-full sm:w-1/2 overflow-hidden rounded-xl">
+            <div className="mb-4 relative overflow-hidden rounded-xl" style={{ maxWidth: "260px" }}>
               {file.type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={URL.createObjectURL(file)} alt="Upload preview" className="w-full h-auto object-cover" />
               ) : (
-                <video src={URL.createObjectURL(file)} className="w-full h-auto object-cover" />
+                <div style={{ aspectRatio: "9/16" }}>
+                  <video src={URL.createObjectURL(file)} className="w-full h-full object-cover rounded-xl" />
+                </div>
               )}
-              <button onClick={() => setFile(null)} className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white text-xs">✕</button>
+              <button onClick={() => { setFile(null); setVideoError(null); }} className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white text-xs">✕</button>
             </div>
           )}
 
@@ -111,7 +166,7 @@ export function CreatePost() {
               <input 
                 type="file" 
                 ref={fileInputRef} 
-                onChange={(e) => setFile(e.target.files?.[0] || null)} 
+                onChange={(e) => handleFileSelect(e.target.files?.[0] || null)} 
                 accept="image/*,video/*" 
                 className="hidden" 
               />
@@ -127,6 +182,9 @@ export function CreatePost() {
               >
                 <Video className="w-5 h-5" />
               </button>
+              <span className="flex items-center text-[10px] text-zinc-600 ml-1">
+                Max 30s video
+              </span>
             </div>
             
             <Button size="sm" onClick={handlePost} disabled={isPosting || (!content.trim() && !file)}>

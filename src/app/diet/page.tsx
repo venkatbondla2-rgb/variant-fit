@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Search, Loader2, Utensils, Sparkles, Plus, Calendar, Check, Coffee, Sun, Cookie, Moon, ChevronDown } from "lucide-react";
+import { Search, Loader2, Utensils, Sparkles, Plus, Calendar, Check, Coffee, Sun, Cookie, Moon, ChevronDown, Trash2, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+
+const MEAL_TIMES: Record<string, { hour: number; label: string }> = {
+  breakfast: { hour: 9, label: "Breakfast (9 AM)" },
+  lunch: { hour: 13, label: "Lunch (1 PM)" },
+  "mid-snack": { hour: 16, label: "Mid-Snack (4 PM)" },
+  dinner: { hour: 20, label: "Dinner (8 PM)" },
+};
 
 const MEAL_CATEGORIES = [
   { key: "breakfast", label: "Breakfast", icon: Coffee, color: "text-orange-400", bgActive: "bg-orange-400/10 border-orange-400/30" },
@@ -35,7 +42,51 @@ export default function DietPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiParsedMacros, setAiParsedMacros] = useState<any>(null);
+  const [aiStructuredPlan, setAiStructuredPlan] = useState<any>(null);
   const [isApplyingAi, setIsApplyingAi] = useState(false);
+  const [planApplied, setPlanApplied] = useState(false);
+
+  // Auto-populate from saved template if no logs exist for the date
+  const autoPopulateFromTemplate = useCallback(async (dateStr: string) => {
+    if (!user) return;
+    // Check if logs already exist for this date
+    const existingQ = query(
+      collection(db, "diet_logs"),
+      where("userId", "==", user.uid),
+      where("dateString", "==", dateStr)
+    );
+    const existingSnap = await getDocs(existingQ);
+    if (existingSnap.size > 0) return; // already have logs
+
+    // Check for saved template
+    const templateRef = doc(db, "users", user.uid, "diet_templates", "default");
+    const templateSnap = await getDoc(templateRef);
+    if (!templateSnap.exists()) return;
+
+    const template = templateSnap.data();
+    if (!template.meals || template.meals.length === 0) return;
+
+    // Copy template meals to this date
+    const writes: Promise<any>[] = [];
+    for (const item of template.meals) {
+      writes.push(
+        addDoc(collection(db, "diet_logs"), {
+          userId: user.uid,
+          name: item.name,
+          calories: item.calories || 0,
+          protein_g: item.protein_g || 0,
+          carbs_g: item.carbs_g || 0,
+          fat_g: item.fat_g || 0,
+          mealCategory: item.mealCategory,
+          completed: false,
+          dateString: dateStr,
+          createdAt: serverTimestamp(),
+          source: "template",
+        })
+      );
+    }
+    await Promise.all(writes);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -48,11 +99,14 @@ export default function DietPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setDietLogs(snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })));
+      setDietLogs(snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
     });
 
+    // Auto-populate from template
+    autoPopulateFromTemplate(selectedDate);
+
     return () => unsubscribe();
-  }, [user, selectedDate]);
+  }, [user, selectedDate, autoPopulateFromTemplate]);
 
   const searchFood = async () => {
     if (!foodQuery.trim()) return;
@@ -104,10 +158,58 @@ export default function DietPage() {
     }
   };
 
+  const deleteMealLog = async (logId: string) => {
+    if (!confirm("Remove this meal item?")) return;
+    try {
+      await deleteDoc(doc(db, "diet_logs", logId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Meal time reminder notifications
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    if (!("Notification" in window)) return;
+
+    const today = new Date().toISOString().split("T")[0];
+    if (selectedDate !== today) return;
+
+    // Request permission
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    const checkInterval = setInterval(() => {
+      if (Notification.permission !== "granted") return;
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+
+      for (const [category, info] of Object.entries(MEAL_TIMES)) {
+        // Trigger 15 min after meal time if not completed
+        if (currentHour === info.hour && currentMin === 15) {
+          const categoryLogs = dietLogs.filter(l => l.mealCategory === category);
+          const hasIncomplete = categoryLogs.some(l => !l.completed);
+          if (hasIncomplete || categoryLogs.length === 0) {
+            new Notification("🍽️ Variant Fit - Meal Reminder", {
+              body: `Your ${info.label} time is passing! Don't forget your meal.`,
+              icon: "/favicon.ico",
+            });
+          }
+        }
+      }
+    }, 60000); // check every minute
+
+    return () => clearInterval(checkInterval);
+  }, [user, selectedDate, dietLogs]);
+
   const generateDiet = async () => {
     if (!aiPrompt.trim()) return;
     setIsGenerating(true);
     setAiParsedMacros(null);
+    setAiStructuredPlan(null);
+    setPlanApplied(false);
     try {
       const res = await fetch('/api/ai/diet', {
         method: 'POST',
@@ -122,6 +224,9 @@ export default function DietPage() {
         if (data.parsedMacros) {
           setAiParsedMacros(data.parsedMacros);
         }
+        if (data.structuredPlan) {
+          setAiStructuredPlan(data.structuredPlan);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -133,19 +238,63 @@ export default function DietPage() {
 
   const handleApplyAiDiet = async () => {
     if (!user) return;
-    if (!confirm("Apply this diet plan? This will update your daily macro goals.")) return;
+    if (!confirm("Save this diet plan to your meal tracker for " + selectedDate + "?")) return;
     
     setIsApplyingAi(true);
     try {
-      // Use AI-parsed macros if available, otherwise use defaults
+      // Save macro goals
       const goals = aiParsedMacros || { dailyCalories: 2200, dailyProtein: 180, dailyCarbs: 220, dailyFat: 70 };
       const userRef = doc(db, "users", user.uid);
       await setDoc(userRef, { dietGoals: goals }, { merge: true });
-      alert(`Diet Updated!\nCalories: ${goals.dailyCalories}\nProtein: ${goals.dailyProtein}g\nCarbs: ${goals.dailyCarbs}g\nFat: ${goals.dailyFat}g`);
+
+      // Build flat meals list for template + diet_logs
+      const flatMeals: any[] = [];
+      if (aiStructuredPlan?.meals) {
+        for (const meal of aiStructuredPlan.meals) {
+          if (meal.items) {
+            for (const item of meal.items) {
+              flatMeals.push({
+                name: item.name,
+                calories: item.calories || 0,
+                protein_g: item.protein_g || 0,
+                carbs_g: item.carbs_g || 0,
+                fat_g: item.fat_g || 0,
+                mealCategory: meal.mealCategory,
+              });
+            }
+          }
+        }
+      }
+
+      // Save as reusable template (auto-populates future dates)
+      const templateRef = doc(db, "users", user.uid, "diet_templates", "default");
+      await setDoc(templateRef, {
+        meals: flatMeals,
+        updatedAt: new Date().toISOString(),
+        prompt: aiPrompt,
+      });
+
+      // Save individual meal items to diet_logs for selected date
+      const batch: Promise<any>[] = [];
+      for (const item of flatMeals) {
+        batch.push(
+          addDoc(collection(db, "diet_logs"), {
+            userId: user.uid,
+            ...item,
+            completed: false,
+            dateString: selectedDate,
+            createdAt: serverTimestamp(),
+            source: "ai",
+          })
+        );
+      }
+      await Promise.all(batch);
+
+      setPlanApplied(true);
       setActiveTab("tracker");
     } catch (err) {
       console.error(err);
-      alert("Failed to apply diet updates.");
+      alert("Failed to apply diet plan.");
     } finally {
       setIsApplyingAi(false);
     }
@@ -372,6 +521,15 @@ export default function DietPage() {
                               {log.fat_g ? ` • ${log.fat_g}g F` : ""}
                             </p>
                           </div>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => deleteMealLog(log.id)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all flex-shrink-0"
+                            title="Remove meal"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -403,17 +561,55 @@ export default function DietPage() {
              <div className="bg-surface rounded-xl p-6 border border-border shadow-sm flex flex-col gap-6">
                 <div>
                   <h3 className="font-bold mb-4">Your Custom Plan</h3>
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 bg-background p-4 rounded-xl border border-border">
-                    {aiResponse}
-                  </pre>
+                  {aiStructuredPlan?.meals ? (
+                    <div className="flex flex-col gap-3">
+                      {aiStructuredPlan.meals.map((meal: any, mealIdx: number) => {
+                        const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
+                        return (
+                          <div key={`${meal.mealCategory}-${mealIdx}`} className="bg-background rounded-xl border border-border overflow-hidden">
+                            <div className="px-4 py-3 border-b border-border/50 font-bold text-sm">{catLabel}</div>
+                            <div className="divide-y divide-border/30">
+                              {meal.items?.map((item: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                                  <span className="text-sm font-medium">{item.name}</span>
+                                  <span className="text-xs text-zinc-500">{item.calories} cal • {item.protein_g}g P • {item.carbs_g}g C • {item.fat_g}g F</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {aiStructuredPlan.dailyTotals && (
+                        <div className="flex items-center justify-center gap-6 text-sm font-bold py-3">
+                          <span className="text-brand">{aiStructuredPlan.dailyTotals.calories} cal</span>
+                          <span className="text-red-400">{aiStructuredPlan.dailyTotals.protein_g}g P</span>
+                          <span className="text-yellow-400">{aiStructuredPlan.dailyTotals.carbs_g}g C</span>
+                          <span className="text-purple-400">{aiStructuredPlan.dailyTotals.fat_g}g F</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 bg-background p-4 rounded-xl border border-border">
+                      {aiResponse}
+                    </pre>
+                  )}
                 </div>
                 
                 <div className="bg-brand/10 border border-brand/20 p-4 rounded-xl text-center">
-                  <h4 className="font-bold text-brand mb-2">Update Daily Goals?</h4>
-                  <p className="text-xs text-zinc-300 mb-4 max-w-md mx-auto">Grant the AI permission to update your daily calorie and macro tracking goals?</p>
-                  <Button onClick={handleApplyAiDiet} disabled={isApplyingAi} className="font-bold text-xs uppercase px-8">
-                     {isApplyingAi ? "Applying..." : "Yes, Apply Plan"}
-                  </Button>
+                  {planApplied ? (
+                    <>
+                      <h4 className="font-bold text-brand mb-2">✓ Plan Saved!</h4>
+                      <p className="text-xs text-zinc-300">All meals have been added to your tracker. Switch to the Macro Tracker tab to check them off.</p>
+                    </>
+                  ) : (
+                    <>
+                      <h4 className="font-bold text-brand mb-2">Save to Meal Plan</h4>
+                      <p className="text-xs text-zinc-300 mb-4 max-w-md mx-auto">Add all meals to your tracker for {selectedDate}? You can check them off as you eat.</p>
+                      <Button onClick={handleApplyAiDiet} disabled={isApplyingAi} className="font-bold text-xs uppercase px-8">
+                         {isApplyingAi ? "Saving..." : "Save to Meal Plan"}
+                      </Button>
+                    </>
+                  )}
                 </div>
              </div>
            )}

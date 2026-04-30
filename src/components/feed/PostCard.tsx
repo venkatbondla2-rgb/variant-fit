@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, X, Maximize2 } from "lucide-react";
+import { Heart, MessageCircle, Play } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, increment, collection, getCountFromServer } from "firebase/firestore";
@@ -11,13 +11,13 @@ import { NestedReplies } from "@/components/shared/NestedReplies";
 interface PostCardProps {
   post: any;
   compact?: boolean;
+  onOpenReels?: () => void;
 }
 
-export function PostCard({ post, compact = false }: PostCardProps) {
+export function PostCard({ post, compact = false, onOpenReels }: PostCardProps) {
   const { user } = useAuth();
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [showFullscreenVideo, setShowFullscreenVideo] = useState(false);
   const [commentCount, setCommentCount] = useState<number>(post.commentsCount || 0);
 
   useEffect(() => {
@@ -38,19 +38,34 @@ export function PostCard({ post, compact = false }: PostCardProps) {
     await updateDoc(postRef, { likesCount: increment(liked ? -1 : 1) });
   };
 
+  const isVideo = post.mediaType === "video";
+
   // Compact grid card (for profile page)
   if (compact) {
     return (
       <div
         className="relative aspect-square bg-zinc-900 rounded-2xl overflow-hidden border border-border hover:border-brand/50 transition-all cursor-pointer group"
-        onClick={() => setShowComments(!showComments)}
+        onClick={() => {
+          if (isVideo && onOpenReels) {
+            onOpenReels();
+          } else {
+            setShowComments(!showComments);
+          }
+        }}
       >
         {post.mediaUrl ? (
-          post.mediaType === "image" ? (
+          isVideo ? (
+            <div className="relative w-full h-full">
+              <video src={post.mediaUrl} className="w-full h-full object-cover" muted />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                  <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                </div>
+              </div>
+            </div>
+          ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={post.mediaUrl} alt="Post" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-          ) : (
-            <video src={post.mediaUrl} className="w-full h-full object-cover" muted />
           )
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 bg-surface">
@@ -85,30 +100,38 @@ export function PostCard({ post, compact = false }: PostCardProps) {
 
       {/* Media */}
       {post.mediaUrl && (
-        <div className="rounded-xl overflow-hidden mb-4 bg-black relative">
-          {post.mediaType === "image" ? (
+        <div
+          className={`rounded-xl overflow-hidden mb-4 bg-black relative ${
+            isVideo ? "cursor-pointer" : ""
+          }`}
+          onClick={isVideo && onOpenReels ? onOpenReels : undefined}
+        >
+          {!isVideo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={post.mediaUrl} alt="Post media" className="w-full h-auto object-cover max-h-[500px]" />
           ) : (
-            <div className="relative">
-              <video src={post.mediaUrl} controls className="w-full h-auto object-cover max-h-[500px]" />
-              <button onClick={() => setShowFullscreenVideo(true)}
-                className="absolute top-3 right-3 p-2 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors sm:hidden">
-                <Maximize2 className="w-4 h-4" />
-              </button>
+            <div className="relative" style={{ aspectRatio: "9/16", maxHeight: "600px", margin: "0 auto" }}>
+              <video
+                src={post.mediaUrl}
+                className="w-full h-full object-cover rounded-xl"
+                muted
+                loop
+                playsInline
+                onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+              />
+              {/* Play icon overlay */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center transition-opacity group-hover:opacity-0">
+                  <Play className="w-7 h-7 text-white fill-white ml-1" />
+                </div>
+              </div>
+              {/* Reels badge */}
+              <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold uppercase px-2 py-1 rounded-full tracking-wider">
+                Reel
+              </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Fullscreen Video Overlay (Mobile) */}
-      {showFullscreenVideo && post.mediaUrl && post.mediaType !== "image" && (
-        <div className="fixed inset-0 bg-black z-[100] flex items-center justify-center" onClick={() => setShowFullscreenVideo(false)}>
-          <button onClick={() => setShowFullscreenVideo(false)}
-            className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white z-10 hover:bg-white/20">
-            <X className="w-6 h-6" />
-          </button>
-          <video src={post.mediaUrl} controls autoPlay className="w-full h-full object-contain" onClick={e => e.stopPropagation()} />
         </div>
       )}
 
