@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MuscleMatrix, getMusclesFromWorkouts } from "@/components/track/MuscleMatrix";
 import { collection, query, where, orderBy, onSnapshot, getDocs, doc, getDoc, updateDoc, setDoc, addDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Calendar, Trophy, Flame, Scale, Edit3, Check, X, Plus, Trash2, ChevronDown, Dumbbell, TrendingUp, Settings } from "lucide-react";
+import { Calendar, Trophy, Flame, Scale, Edit3, Check, X, Plus, Trash2, ChevronDown, Dumbbell, TrendingUp, Settings, Footprints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Workout splits
@@ -76,6 +76,11 @@ export default function TrackPage() {
   const [editingWeight, setEditingWeight] = useState(false);
   const [tempWeight, setTempWeight] = useState("");
 
+  // Step counter / activity
+  const [steps, setSteps] = useState(0);
+  const [editingSteps, setEditingSteps] = useState(false);
+  const [tempSteps, setTempSteps] = useState("");
+
   // Load user plan from Firestore
   useEffect(() => {
     if (!user) return;
@@ -96,9 +101,20 @@ export default function TrackPage() {
           setShowSetup(true);
         }
       } catch { setShowSetup(true); }
+
+      // Load step count for selected date
+      try {
+        const actRef = doc(db, "activity_logs", `${user.uid}_${selectedDate}`);
+        const actSnap = await getDoc(actRef);
+        if (actSnap.exists()) {
+          setSteps(actSnap.data().steps || 0);
+        } else {
+          setSteps(0);
+        }
+      } catch { setSteps(0); }
     };
     load();
-  }, [user]);
+  }, [user, selectedDate]);
 
   // Load today's logged workouts
   useEffect(() => {
@@ -232,6 +248,28 @@ export default function TrackPage() {
     else { setWeightUnit("lbs"); if (bodyWeight > 0) setBodyWeight(Math.round(bodyWeight * 2.2046)); }
   };
 
+  const saveSteps = async () => {
+    if (!user || !tempSteps) return;
+    const val = parseInt(tempSteps);
+    if (isNaN(val) || val < 0) return;
+    setSteps(val);
+    setEditingSteps(false);
+    try {
+      await setDoc(doc(db, "activity_logs", `${user.uid}_${selectedDate}`), {
+        userId: user.uid,
+        dateString: selectedDate,
+        steps: val,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const walkingDistanceKm = (steps * 0.000762).toFixed(2);
+  const walkingDistanceMi = (steps * 0.000762 * 0.621371).toFixed(2);
+  const stepCalories = Math.round(steps * 0.04);
+
   if (!user) return null;
 
   const activeMuscles = getMusclesFromWorkouts(workouts);
@@ -331,7 +369,7 @@ export default function TrackPage() {
       ))}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-surface rounded-xl p-3 border border-border text-center">
           <p className="text-lg font-black text-brand">{completedCount}/{dayExercises.length}</p>
           <p className="text-[10px] text-zinc-500 uppercase font-bold">Done</p>
@@ -343,6 +381,10 @@ export default function TrackPage() {
         <div className="bg-surface rounded-xl p-3 border border-border text-center">
           <p className="text-lg font-black text-white">{workouts.length}</p>
           <p className="text-[10px] text-zinc-500 uppercase font-bold">Sets Logged</p>
+        </div>
+        <div className="bg-surface rounded-xl p-3 border border-border text-center">
+          <p className="text-lg font-black text-green-400">{steps.toLocaleString()}</p>
+          <p className="text-[10px] text-zinc-500 uppercase font-bold">Steps</p>
         </div>
       </div>
 
@@ -463,6 +505,47 @@ export default function TrackPage() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Daily Activity - Step Counter */}
+          <div className="bg-green-500/10 rounded-xl p-5 border border-green-500/20">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Footprints className="w-5 h-5 text-green-400" />
+                <h3 className="font-bold text-green-400 text-sm">Daily Activity</h3>
+              </div>
+            </div>
+
+            {editingSteps ? (
+              <div className="flex items-center gap-2 mb-4">
+                <input type="number" value={tempSteps} onChange={e => setTempSteps(e.target.value)} autoFocus placeholder="e.g. 8000"
+                  className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400 text-center font-bold" />
+                <button onClick={saveSteps} className="p-2 rounded-full bg-green-500 text-black"><Check className="w-4 h-4" /></button>
+                <button onClick={() => setEditingSteps(false)} className="p-2 rounded-full bg-surface border border-border"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-end gap-1">
+                  <span className="text-3xl font-black text-white">{steps.toLocaleString()}</span>
+                  <span className="text-sm text-zinc-400 mb-1">steps</span>
+                </div>
+                <button onClick={() => { setTempSteps(steps.toString()); setEditingSteps(true); }}
+                  className="bg-surface text-white font-medium py-2 px-4 rounded-full text-xs hover:bg-surface-hover border border-border transition-all flex items-center gap-1">
+                  <Edit3 className="w-3 h-3" /> Log Steps
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-background rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-green-400">{weightUnit === "kg" ? walkingDistanceKm : walkingDistanceMi}</p>
+                <p className="text-[10px] text-zinc-500 uppercase font-bold">{weightUnit === "kg" ? "km" : "miles"}</p>
+              </div>
+              <div className="bg-background rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-orange-400">{stepCalories}</p>
+                <p className="text-[10px] text-zinc-500 uppercase font-bold">Cal from steps</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

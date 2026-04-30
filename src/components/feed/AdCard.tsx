@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ExternalLink, Flame, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { collection, getDocs, limit, query, doc, updateDoc, increment } from "firebase/firestore";
+import { collection, getDocs, limit, query, doc, updateDoc, increment, arrayUnion, arrayRemove } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 
@@ -11,6 +11,7 @@ export function AdCard() {
   const { user } = useAuth();
   const [ad, setAd] = useState<any>(null);
   const [reacted, setReacted] = useState(false);
+  const [localReactions, setLocalReactions] = useState(0);
   const viewTracked = useRef(false);
 
   useEffect(() => {
@@ -20,15 +21,20 @@ export function AdCard() {
         const snap = await getDocs(q);
         if (!snap.empty) {
           const ads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          const selected = ads[Math.floor(Math.random() * ads.length)];
+          const selected = ads[Math.floor(Math.random() * ads.length)] as any;
           setAd(selected);
+          setLocalReactions(selected.reactions || 0);
+          // Check if user already reacted
+          if (user && selected.reactedBy?.includes(user.uid)) {
+            setReacted(true);
+          }
         }
       } catch(err) {
         console.error("Ads fetch error", err);
       }
     };
     fetchAd();
-  }, []);
+  }, [user]);
 
   // Track view once per render
   useEffect(() => {
@@ -48,24 +54,37 @@ export function AdCard() {
   }, [ad]);
 
   const handleReaction = async () => {
-    if (!ad || reacted) return;
-    setReacted(true);
+    if (!ad || !user) return;
     try {
-      await updateDoc(doc(db, "ads", ad.id), {
-        reactions: increment(1)
-      });
+      if (reacted) {
+        // Un-react (toggle off)
+        setReacted(false);
+        setLocalReactions(prev => Math.max(0, prev - 1));
+        await updateDoc(doc(db, "ads", ad.id), {
+          reactions: increment(-1),
+          reactedBy: arrayRemove(user.uid),
+        });
+      } else {
+        // React (toggle on)
+        setReacted(true);
+        setLocalReactions(prev => prev + 1);
+        await updateDoc(doc(db, "ads", ad.id), {
+          reactions: increment(1),
+          reactedBy: arrayUnion(user.uid),
+        });
+      }
     } catch (err) {
       console.error("Reaction failed:", err);
-      setReacted(false);
+      // Revert on error
+      setReacted(!reacted);
     }
   };
 
   if (!ad) return null;
 
-  // Styled like a normal feed PostCard
   return (
     <div className="bg-surface rounded-3xl p-4 sm:p-6 border border-border w-full">
-      {/* Header - looks like a post author */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-brand to-green-600 flex items-center justify-center flex-shrink-0">
           <Megaphone className="w-4 h-4 sm:w-5 sm:h-5 text-black" />
@@ -76,10 +95,8 @@ export function AdCard() {
         </div>
       </div>
 
-      {/* Ad description if exists */}
       {ad.description && <p className="mb-3 text-sm text-zinc-300">{ad.description}</p>}
 
-      {/* Image - same style as PostCard media */}
       {ad.imageUrl && (
         <div className="rounded-xl overflow-hidden mb-4 bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -87,7 +104,7 @@ export function AdCard() {
         </div>
       )}
 
-      {/* Actions - like a post */}
+      {/* Actions */}
       <div className="flex items-center justify-between mt-2">
         <button
           onClick={handleReaction}
@@ -98,7 +115,7 @@ export function AdCard() {
           }`}
         >
           <Flame className={`w-5 h-5 ${reacted ? "fill-orange-400" : ""}`} />
-          {ad.reactions || 0}
+          {localReactions}
         </button>
         
         <a href={ad.link} target="_blank" rel="noopener noreferrer">

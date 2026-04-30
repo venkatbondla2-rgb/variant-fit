@@ -123,5 +123,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.fromId == request.auth.uid;
       allow update, delete: if isAuthenticated() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
     }
+
+    // 14. Activity Logs (Step Counter)
+    match /activity_logs/{logId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
   }
 }

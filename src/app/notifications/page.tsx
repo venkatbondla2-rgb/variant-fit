@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDocs, addDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDocs, addDoc, serverTimestamp, arrayUnion, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity, UserPlus, UserCheck, Dumbbell } from "lucide-react";
+import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity, UserPlus, UserCheck, Dumbbell, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [swipedId, setSwipedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -74,24 +75,34 @@ export default function NotificationsPage() {
     }
   };
 
+  const deleteNotification = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "notifications", id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!confirm("Delete all notifications?")) return;
+    try {
+      const batch = writeBatch(db);
+      notifications.forEach(n => {
+        batch.delete(doc(db, "notifications", n.id));
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const acceptFriendRequest = async (request: any) => {
     if (!user) return;
     setAcceptingId(request.id);
     try {
-      // Update request status
-      await updateDoc(doc(db, "friend_requests", request.id), {
-        status: "accepted"
-      });
-
-      // Add each other to friends arrays
-      await updateDoc(doc(db, "users", user.uid), {
-        friends: arrayUnion(request.fromId)
-      });
-      await updateDoc(doc(db, "users", request.fromId), {
-        friends: arrayUnion(user.uid)
-      });
-
-      // Notify sender
+      await updateDoc(doc(db, "friend_requests", request.id), { status: "accepted" });
+      await updateDoc(doc(db, "users", user.uid), { friends: arrayUnion(request.fromId) });
+      await updateDoc(doc(db, "users", request.fromId), { friends: arrayUnion(user.uid) });
       await addDoc(collection(db, "notifications"), {
         userId: request.fromId,
         type: "friend_accepted",
@@ -100,8 +111,6 @@ export default function NotificationsPage() {
         read: false,
         createdAt: serverTimestamp(),
       });
-
-      // Remove from local list
       setPendingRequests(prev => prev.filter(r => r.id !== request.id));
     } catch (err) {
       console.error(err);
@@ -115,14 +124,26 @@ export default function NotificationsPage() {
     if (!user) return;
     setAcceptingId(request.id);
     try {
-      await updateDoc(doc(db, "friend_requests", request.id), {
-        status: "declined"
-      });
+      await updateDoc(doc(db, "friend_requests", request.id), { status: "declined" });
       setPendingRequests(prev => prev.filter(r => r.id !== request.id));
     } catch (err) {
       console.error(err);
     } finally {
       setAcceptingId(null);
+    }
+  };
+
+  // Swipe-to-delete touch handlers
+  const touchStartX = useRef(0);
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent, id: string) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (diff > 80) {
+      setSwipedId(id);
+    } else if (diff < -40) {
+      setSwipedId(null);
     }
   };
 
@@ -147,11 +168,18 @@ export default function NotificationsPage() {
           <Activity className="w-8 h-8 text-brand" />
           Activity
         </h1>
-        {notifications.some(n => !n.read) && (
-           <Button variant="outline" size="sm" onClick={markAllAsRead} className="text-xs">
-             <CheckCircle2 className="w-4 h-4 mr-2" /> Mark all read
-           </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {notifications.some(n => !n.read) && (
+             <Button variant="outline" size="sm" onClick={markAllAsRead} className="text-xs">
+               <CheckCircle2 className="w-4 h-4 mr-2" /> Mark all read
+             </Button>
+          )}
+          {notifications.length > 0 && (
+            <Button variant="outline" size="sm" onClick={clearAllNotifications} className="text-xs text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-400">
+              <Trash2 className="w-4 h-4 mr-2" /> Clear All
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Pending Friend Requests Section */}
@@ -175,21 +203,10 @@ export default function NotificationsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button 
-                    onClick={() => acceptFriendRequest(req)} 
-                    disabled={acceptingId === req.id}
-                    size="sm"
-                    className="bg-brand text-black hover:brightness-110 font-bold gap-1"
-                  >
+                  <Button onClick={() => acceptFriendRequest(req)} disabled={acceptingId === req.id} size="sm" className="bg-brand text-black hover:brightness-110 font-bold gap-1">
                     <UserCheck className="w-4 h-4" /> Accept
                   </Button>
-                  <Button 
-                    onClick={() => declineFriendRequest(req)} 
-                    disabled={acceptingId === req.id}
-                    size="sm"
-                    variant="outline" 
-                    className="text-zinc-400 border-border hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50"
-                  >
+                  <Button onClick={() => declineFriendRequest(req)} disabled={acceptingId === req.id} size="sm" variant="outline" className="text-zinc-400 border-border hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50">
                     Decline
                   </Button>
                 </div>
@@ -207,33 +224,62 @@ export default function NotificationsPage() {
            <p className="text-zinc-400 text-center">You have no new notifications.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
            {notifications.map(n => (
-              <div 
-                key={n.id} 
-                onClick={() => !n.read && markAsRead(n.id)}
-                className={`flex gap-4 p-4 rounded-2xl border transition-all cursor-pointer ${
-                  n.read ? "bg-background border-border/50 opacity-70" : "bg-surface border-brand/50 shadow-[0_0_15px_rgba(234,255,102,0.1)]"
-                }`}
+              <div
+                key={n.id}
+                className="relative overflow-hidden rounded-2xl"
+                onTouchStart={(e) => handleTouchStart(e, n.id)}
+                onTouchEnd={(e) => handleTouchEnd(e, n.id)}
               >
-                 <div className="mt-1 flex-shrink-0">
-                    {getIcon(n.type)}
-                 </div>
-                 <div className="flex-1 flex flex-col items-start gap-1">
-                    <p className={`text-sm ${n.read ? "text-zinc-300" : "text-white font-medium"}`}>
-                       {n.message}
-                    </p>
-                    <span className="text-[10px] text-zinc-500">
-                       {n.createdAt?.toDate?.()?.toLocaleString(undefined, {
-                         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                       }) || "Just now"}
-                    </span>
-                 </div>
-                 {n.link && (
-                    <Link href={n.link} className="self-center bg-brand/10 hover:bg-brand hover:text-black text-brand text-xs font-bold px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">
-                       View
-                    </Link>
-                 )}
+                {/* Delete button revealed on swipe */}
+                <div className={`absolute right-0 top-0 bottom-0 flex items-center transition-all ${swipedId === n.id ? "w-20" : "w-0"} overflow-hidden`}>
+                  <button
+                    onClick={() => deleteNotification(n.id)}
+                    className="w-full h-full bg-red-500 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-5 h-5 text-white" />
+                  </button>
+                </div>
+
+                <div 
+                  onClick={() => { if (!n.read) markAsRead(n.id); if (swipedId === n.id) setSwipedId(null); }}
+                  className={`flex gap-4 p-4 border transition-all cursor-pointer relative bg-clip-padding ${
+                    swipedId === n.id ? "-translate-x-20" : "translate-x-0"
+                  } ${
+                    n.read ? "bg-background border-border/50 opacity-70" : "bg-surface border-brand/50 shadow-[0_0_15px_rgba(234,255,102,0.1)]"
+                  }`}
+                  style={{ transition: "transform 0.2s ease" }}
+                >
+                   <div className="mt-1 flex-shrink-0">
+                      {getIcon(n.type)}
+                   </div>
+                   <div className="flex-1 flex flex-col items-start gap-1">
+                      <p className={`text-sm ${n.read ? "text-zinc-300" : "text-white font-medium"}`}>
+                         {n.message}
+                      </p>
+                      <span className="text-[10px] text-zinc-500">
+                         {n.createdAt?.toDate?.()?.toLocaleString(undefined, {
+                           month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                         }) || "Just now"}
+                      </span>
+                   </div>
+                   <div className="flex items-center gap-2 self-center">
+                     {n.link && (
+                        <Link href={n.link} className="bg-brand/10 hover:bg-brand hover:text-black text-brand text-xs font-bold px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">
+                           View
+                        </Link>
+                     )}
+                     {/* Desktop delete button */}
+                     <button
+                       onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                       className="hidden sm:flex w-7 h-7 rounded-lg items-center justify-center text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                       title="Delete"
+                     >
+                       <X className="w-3.5 h-3.5" />
+                     </button>
+                   </div>
+                </div>
               </div>
            ))}
         </div>

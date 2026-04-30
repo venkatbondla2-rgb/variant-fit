@@ -26,39 +26,35 @@ The JSON must follow this exact schema:
     "carbs_g": <number>,
     "fat_g": <number>
   },
-  "meals": [
+  "dayPlans": [
     {
-      "mealCategory": "breakfast",
-      "items": [
+      "dayLabel": "Day A",
+      "meals": [
         {
-          "name": "Food item name",
-          "calories": <number>,
-          "protein_g": <number>,
-          "carbs_g": <number>,
-          "fat_g": <number>
-        }
+          "mealCategory": "breakfast",
+          "items": [
+            { "name": "Food item name", "calories": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number> }
+          ]
+        },
+        { "mealCategory": "lunch", "items": [...] },
+        { "mealCategory": "mid-snack", "items": [...] },
+        { "mealCategory": "dinner", "items": [...] }
       ]
     },
-    {
-      "mealCategory": "lunch",
-      "items": [...]
-    },
-    {
-      "mealCategory": "mid-snack",
-      "items": [...]
-    },
-    {
-      "mealCategory": "dinner",
-      "items": [...]
-    }
+    { "dayLabel": "Day B", "meals": [...] },
+    { "dayLabel": "Day C", "meals": [...] },
+    { "dayLabel": "Day D", "meals": [...] }
   ]
 }
 
-Rules:
-- Always include exactly 4 meal categories: breakfast, lunch, mid-snack, dinner
+CRITICAL RULES:
+- Generate exactly 4 different day plans (Day A, B, C, D)
+- Each day must have DIFFERENT food items but similar macro totals
+- Use creative variety: different proteins, grains, vegetables across days
+- Always include exactly 4 meal categories per day: breakfast, lunch, mid-snack, dinner
 - Each meal should have 2-4 food items
 - All macro numbers should be realistic integers
-- The dailyTotals should match the sum of all items
+- The dailyTotals should be the target for each day
 - Tailor the plan to the user's goals, allergies, and preferences
 - Respond with ONLY the JSON object, nothing else`;
 
@@ -74,7 +70,7 @@ Rules:
           { role: "system", content: systemMessage },
           { role: "user", content: prompt }
         ],
-        temperature: 0.5,
+        temperature: 0.6,
         response_format: { type: "json_object" }
       })
     });
@@ -88,7 +84,6 @@ Rules:
     const data = await res.json();
     const rawContent = data.choices[0]?.message?.content || "";
 
-    // Parse the structured JSON response
     let structuredPlan = null;
     let recommendation = "";
     let parsedMacros = null;
@@ -96,24 +91,28 @@ Rules:
     try {
       structuredPlan = JSON.parse(rawContent);
       
-      // Build a human-readable text version
       recommendation = `${structuredPlan.summary || "Your Custom Diet Plan"}\n\n`;
       recommendation += `Daily Totals: ${structuredPlan.dailyTotals?.calories || 0} cal, ${structuredPlan.dailyTotals?.protein_g || 0}g protein, ${structuredPlan.dailyTotals?.carbs_g || 0}g carbs, ${structuredPlan.dailyTotals?.fat_g || 0}g fat\n\n`;
 
-      if (structuredPlan.meals) {
-        for (const meal of structuredPlan.meals) {
-          const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
-          recommendation += `--- ${catLabel} ---\n`;
-          if (meal.items) {
-            for (const item of meal.items) {
-              recommendation += `  ${item.name} — ${item.calories} cal | ${item.protein_g}g P | ${item.carbs_g}g C | ${item.fat_g}g F\n`;
+      // Support both old (meals) and new (dayPlans) format
+      const dayPlans = structuredPlan.dayPlans || (structuredPlan.meals ? [{ dayLabel: "Day A", meals: structuredPlan.meals }] : []);
+      
+      for (const day of dayPlans) {
+        recommendation += `=== ${day.dayLabel} ===\n`;
+        if (day.meals) {
+          for (const meal of day.meals) {
+            const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
+            recommendation += `  --- ${catLabel} ---\n`;
+            if (meal.items) {
+              for (const item of meal.items) {
+                recommendation += `    ${item.name} — ${item.calories} cal | ${item.protein_g}g P | ${item.carbs_g}g C | ${item.fat_g}g F\n`;
+              }
             }
           }
-          recommendation += "\n";
         }
+        recommendation += "\n";
       }
 
-      // Extract daily totals for macro goals
       if (structuredPlan.dailyTotals) {
         parsedMacros = {
           dailyCalories: structuredPlan.dailyTotals.calories,
@@ -123,16 +122,11 @@ Rules:
         };
       }
     } catch (parseErr) {
-      // If JSON parsing fails, use raw text as fallback
       console.error("Failed to parse structured AI response:", parseErr);
       recommendation = rawContent;
     }
 
-    return NextResponse.json({ 
-      recommendation, 
-      parsedMacros,
-      structuredPlan 
-    });
+    return NextResponse.json({ recommendation, parsedMacros, structuredPlan });
   } catch (error: any) {
     console.error("AI Diet Error:", error.message || error);
     return NextResponse.json({ error: error.message || "Failed to generate diet plan" }, { status: 500 });

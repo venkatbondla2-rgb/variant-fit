@@ -14,6 +14,14 @@ const MEAL_TIMES: Record<string, { hour: number; label: string }> = {
   dinner: { hour: 20, label: "Dinner (8 PM)" },
 };
 
+// Map day-of-week to one of 4 plan variants: Mon/Thu=0, Tue/Fri=1, Wed/Sat=2, Sun=3
+function getDayVariantIndex(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00");
+  const dow = d.getDay(); // 0=Sun,1=Mon,...6=Sat
+  const map: Record<number, number> = { 0: 3, 1: 0, 2: 1, 3: 2, 4: 0, 5: 1, 6: 2 };
+  return map[dow] ?? 0;
+}
+
 const MEAL_CATEGORIES = [
   { key: "breakfast", label: "Breakfast", icon: Coffee, color: "text-orange-400", bgActive: "bg-orange-400/10 border-orange-400/30" },
   { key: "lunch", label: "Lunch", icon: Sun, color: "text-yellow-400", bgActive: "bg-yellow-400/10 border-yellow-400/30" },
@@ -49,41 +57,53 @@ export default function DietPage() {
   // Auto-populate from saved template if no logs exist for the date
   const autoPopulateFromTemplate = useCallback(async (dateStr: string) => {
     if (!user) return;
-    // Check if logs already exist for this date
     const existingQ = query(
       collection(db, "diet_logs"),
       where("userId", "==", user.uid),
       where("dateString", "==", dateStr)
     );
     const existingSnap = await getDocs(existingQ);
-    if (existingSnap.size > 0) return; // already have logs
+    if (existingSnap.size > 0) return;
 
-    // Check for saved template
     const templateRef = doc(db, "users", user.uid, "diet_templates", "default");
     const templateSnap = await getDoc(templateRef);
     if (!templateSnap.exists()) return;
 
     const template = templateSnap.data();
-    if (!template.meals || template.meals.length === 0) return;
+    const dayPlans = template.dayPlans;
+    if (!dayPlans || dayPlans.length === 0) {
+      // Legacy single-plan fallback
+      if (!template.meals || template.meals.length === 0) return;
+      const writes: Promise<any>[] = [];
+      for (const item of template.meals) {
+        writes.push(addDoc(collection(db, "diet_logs"), {
+          userId: user.uid, name: item.name, calories: item.calories || 0,
+          protein_g: item.protein_g || 0, carbs_g: item.carbs_g || 0,
+          fat_g: item.fat_g || 0, mealCategory: item.mealCategory,
+          completed: false, dateString: dateStr, createdAt: serverTimestamp(), source: "template",
+        }));
+      }
+      await Promise.all(writes);
+      return;
+    }
 
-    // Copy template meals to this date
+    // Pick the right day variant based on day-of-week
+    const variantIdx = getDayVariantIndex(dateStr);
+    const selectedPlan = dayPlans[variantIdx % dayPlans.length];
+    if (!selectedPlan?.meals) return;
+
     const writes: Promise<any>[] = [];
-    for (const item of template.meals) {
-      writes.push(
-        addDoc(collection(db, "diet_logs"), {
-          userId: user.uid,
-          name: item.name,
-          calories: item.calories || 0,
-          protein_g: item.protein_g || 0,
-          carbs_g: item.carbs_g || 0,
-          fat_g: item.fat_g || 0,
-          mealCategory: item.mealCategory,
-          completed: false,
-          dateString: dateStr,
-          createdAt: serverTimestamp(),
-          source: "template",
-        })
-      );
+    for (const meal of selectedPlan.meals) {
+      if (meal.items) {
+        for (const item of meal.items) {
+          writes.push(addDoc(collection(db, "diet_logs"), {
+            userId: user.uid, name: item.name, calories: item.calories || 0,
+            protein_g: item.protein_g || 0, carbs_g: item.carbs_g || 0,
+            fat_g: item.fat_g || 0, mealCategory: meal.mealCategory,
+            completed: false, dateString: dateStr, createdAt: serverTimestamp(), source: "template",
+          }));
+        }
+      }
     }
     await Promise.all(writes);
   }, [user]);
@@ -238,57 +258,44 @@ export default function DietPage() {
 
   const handleApplyAiDiet = async () => {
     if (!user) return;
-    if (!confirm("Save this diet plan to your meal tracker for " + selectedDate + "?")) return;
+    if (!confirm("Save this diet plan? It will auto-fill your meals daily with rotating menus.")) return;
     
     setIsApplyingAi(true);
     try {
-      // Save macro goals
       const goals = aiParsedMacros || { dailyCalories: 2200, dailyProtein: 180, dailyCarbs: 220, dailyFat: 70 };
       const userRef = doc(db, "users", user.uid);
       await setDoc(userRef, { dietGoals: goals }, { merge: true });
 
-      // Build flat meals list for template + diet_logs
-      const flatMeals: any[] = [];
-      if (aiStructuredPlan?.meals) {
-        for (const meal of aiStructuredPlan.meals) {
-          if (meal.items) {
-            for (const item of meal.items) {
-              flatMeals.push({
-                name: item.name,
-                calories: item.calories || 0,
-                protein_g: item.protein_g || 0,
-                carbs_g: item.carbs_g || 0,
-                fat_g: item.fat_g || 0,
-                mealCategory: meal.mealCategory,
-              });
-            }
-          }
-        }
-      }
+      // Build dayPlans array for template
+      const dayPlans = aiStructuredPlan?.dayPlans || (aiStructuredPlan?.meals ? [{ dayLabel: "Day A", meals: aiStructuredPlan.meals }] : []);
 
-      // Save as reusable template (auto-populates future dates)
+      // Save as reusable template with all day variants
       const templateRef = doc(db, "users", user.uid, "diet_templates", "default");
       await setDoc(templateRef, {
-        meals: flatMeals,
+        dayPlans,
         updatedAt: new Date().toISOString(),
         prompt: aiPrompt,
       });
 
-      // Save individual meal items to diet_logs for selected date
-      const batch: Promise<any>[] = [];
-      for (const item of flatMeals) {
-        batch.push(
-          addDoc(collection(db, "diet_logs"), {
-            userId: user.uid,
-            ...item,
-            completed: false,
-            dateString: selectedDate,
-            createdAt: serverTimestamp(),
-            source: "ai",
-          })
-        );
+      // Save today's variant to diet_logs
+      const variantIdx = getDayVariantIndex(selectedDate);
+      const todayPlan = dayPlans[variantIdx % dayPlans.length];
+      if (todayPlan?.meals) {
+        const batch: Promise<any>[] = [];
+        for (const meal of todayPlan.meals) {
+          if (meal.items) {
+            for (const item of meal.items) {
+              batch.push(addDoc(collection(db, "diet_logs"), {
+                userId: user.uid, name: item.name, calories: item.calories || 0,
+                protein_g: item.protein_g || 0, carbs_g: item.carbs_g || 0,
+                fat_g: item.fat_g || 0, mealCategory: meal.mealCategory,
+                completed: false, dateString: selectedDate, createdAt: serverTimestamp(), source: "ai",
+              }));
+            }
+          }
+        }
+        await Promise.all(batch);
       }
-      await Promise.all(batch);
 
       setPlanApplied(true);
       setActiveTab("tracker");
@@ -557,62 +564,14 @@ export default function DietPage() {
               </Button>
            </div>
 
-           {aiResponse && (
-             <div className="bg-surface rounded-xl p-6 border border-border shadow-sm flex flex-col gap-6">
-                <div>
-                  <h3 className="font-bold mb-4">Your Custom Plan</h3>
-                  {aiStructuredPlan?.meals ? (
-                    <div className="flex flex-col gap-3">
-                      {aiStructuredPlan.meals.map((meal: any, mealIdx: number) => {
-                        const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
-                        return (
-                          <div key={`${meal.mealCategory}-${mealIdx}`} className="bg-background rounded-xl border border-border overflow-hidden">
-                            <div className="px-4 py-3 border-b border-border/50 font-bold text-sm">{catLabel}</div>
-                            <div className="divide-y divide-border/30">
-                              {meal.items?.map((item: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between px-4 py-2.5">
-                                  <span className="text-sm font-medium">{item.name}</span>
-                                  <span className="text-xs text-zinc-500">{item.calories} cal • {item.protein_g}g P • {item.carbs_g}g C • {item.fat_g}g F</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {aiStructuredPlan.dailyTotals && (
-                        <div className="flex items-center justify-center gap-6 text-sm font-bold py-3">
-                          <span className="text-brand">{aiStructuredPlan.dailyTotals.calories} cal</span>
-                          <span className="text-red-400">{aiStructuredPlan.dailyTotals.protein_g}g P</span>
-                          <span className="text-yellow-400">{aiStructuredPlan.dailyTotals.carbs_g}g C</span>
-                          <span className="text-purple-400">{aiStructuredPlan.dailyTotals.fat_g}g F</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 bg-background p-4 rounded-xl border border-border">
-                      {aiResponse}
-                    </pre>
-                  )}
-                </div>
-                
-                <div className="bg-brand/10 border border-brand/20 p-4 rounded-xl text-center">
-                  {planApplied ? (
-                    <>
-                      <h4 className="font-bold text-brand mb-2">✓ Plan Saved!</h4>
-                      <p className="text-xs text-zinc-300">All meals have been added to your tracker. Switch to the Macro Tracker tab to check them off.</p>
-                    </>
-                  ) : (
-                    <>
-                      <h4 className="font-bold text-brand mb-2">Save to Meal Plan</h4>
-                      <p className="text-xs text-zinc-300 mb-4 max-w-md mx-auto">Add all meals to your tracker for {selectedDate}? You can check them off as you eat.</p>
-                      <Button onClick={handleApplyAiDiet} disabled={isApplyingAi} className="font-bold text-xs uppercase px-8">
-                         {isApplyingAi ? "Saving..." : "Save to Meal Plan"}
-                      </Button>
-                    </>
-                  )}
-                </div>
-             </div>
-           )}
+           {aiResponse && <AiPlanPreview
+             aiStructuredPlan={aiStructuredPlan}
+             aiResponse={aiResponse}
+             planApplied={planApplied}
+             isApplyingAi={isApplyingAi}
+             selectedDate={selectedDate}
+             onApply={handleApplyAiDiet}
+           />}
         </div>
       )}
     </div>
@@ -655,7 +614,7 @@ function ManualFoodEntry({ userId, selectedDate, selectedMealCategory }: { userI
 
   return (
     <div className="bg-surface rounded-xl p-6 border border-border shadow-sm flex flex-col gap-4">
-      <h3 className="font-bold flex items-center gap-2"><Plus className="w-5 h-5 text-brand" /> Manual Entry</h3>
+      <h3 className="font-bold flex items-center gap-2">Manual Entry</h3>
       <p className="text-xs text-zinc-500">Add your own food item with custom macros.</p>
       
       <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Food name (e.g. Greek Yogurt)" className="bg-background border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-brand" />
@@ -682,6 +641,100 @@ function ManualFoodEntry({ userId, selectedDate, selectedMealCategory }: { userI
       <Button onClick={handleSave} disabled={!name || isSaving} className="w-full bg-brand text-black font-bold rounded-xl">
         {isSaving ? "Saving..." : "Add to Meal Plan"}
       </Button>
+    </div>
+  );
+}
+
+// AI Plan Preview with Day Tabs
+function AiPlanPreview({ aiStructuredPlan, aiResponse, planApplied, isApplyingAi, selectedDate, onApply }: {
+  aiStructuredPlan: any; aiResponse: string; planApplied: boolean; isApplyingAi: boolean; selectedDate: string; onApply: () => void;
+}) {
+  const [activeDay, setActiveDay] = useState(0);
+
+  const dayPlans = aiStructuredPlan?.dayPlans || (aiStructuredPlan?.meals ? [{ dayLabel: "Day A", meals: aiStructuredPlan.meals }] : []);
+  const hasDayPlans = dayPlans.length > 0;
+  const currentPlan = dayPlans[activeDay];
+
+  const dayLabels = ["A", "B", "C", "D"];
+  const dayColors = ["text-brand", "text-blue-400", "text-pink-400", "text-orange-400"];
+  const daySchedule = "Mon/Thu → A  •  Tue/Fri → B  •  Wed/Sat → C  •  Sun → D";
+
+  return (
+    <div className="bg-surface rounded-xl p-6 border border-border shadow-sm flex flex-col gap-6">
+      <div>
+        <h3 className="font-bold mb-4">Your 4-Day Rotating Plan</h3>
+
+        {hasDayPlans ? (
+          <>
+            {/* Day tabs */}
+            <div className="flex gap-2 mb-4">
+              {dayPlans.map((dp: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveDay(idx)}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeDay === idx ? "bg-brand text-black" : "bg-background border border-border text-zinc-400 hover:border-brand/50"}`}
+                >
+                  Day {dayLabels[idx] || idx + 1}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-zinc-500 mb-3">{daySchedule}</p>
+
+            {/* Meals for selected day */}
+            {currentPlan?.meals && (
+              <div className="flex flex-col gap-3">
+                {currentPlan.meals.map((meal: any, mealIdx: number) => {
+                  const catLabel = meal.mealCategory.charAt(0).toUpperCase() + meal.mealCategory.slice(1).replace("-", " ");
+                  return (
+                    <div key={`${meal.mealCategory}-${mealIdx}`} className="bg-background rounded-xl border border-border overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50 font-bold text-sm">{catLabel}</div>
+                      <div className="divide-y divide-border/30">
+                        {meal.items?.map((item: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-2.5">
+                            <span className="text-sm font-medium">{item.name}</span>
+                            <span className="text-xs text-zinc-500">{item.calories} cal • {item.protein_g}g P • {item.carbs_g}g C • {item.fat_g}g F</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {aiStructuredPlan.dailyTotals && (
+              <div className="flex items-center justify-center gap-6 text-sm font-bold py-3">
+                <span className="text-brand">{aiStructuredPlan.dailyTotals.calories} cal</span>
+                <span className="text-red-400">{aiStructuredPlan.dailyTotals.protein_g}g P</span>
+                <span className="text-yellow-400">{aiStructuredPlan.dailyTotals.carbs_g}g C</span>
+                <span className="text-purple-400">{aiStructuredPlan.dailyTotals.fat_g}g F</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 bg-background p-4 rounded-xl border border-border">
+            {aiResponse}
+          </pre>
+        )}
+      </div>
+
+      <div className="bg-brand/10 border border-brand/20 p-4 rounded-xl text-center">
+        {planApplied ? (
+          <>
+            <h4 className="font-bold text-brand mb-2">✓ Plan Saved!</h4>
+            <p className="text-xs text-zinc-300">All 4 day variants saved. Your meals will auto-rotate daily.</p>
+          </>
+        ) : (
+          <>
+            <h4 className="font-bold text-brand mb-2">Save Rotating Plan</h4>
+            <p className="text-xs text-zinc-300 mb-4 max-w-md mx-auto">Save all 4 day variants. Today&apos;s meals will be added to {selectedDate}. Future dates auto-populate.</p>
+            <Button onClick={onApply} disabled={isApplyingAi} className="font-bold text-xs uppercase px-8">
+               {isApplyingAi ? "Saving..." : "Save Plan"}
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

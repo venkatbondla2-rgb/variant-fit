@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { collection, query, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, doc, arrayUnion, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
-import { Users, Plus, Globe, LayoutList, ArrowLeft, Send, MessageCircle } from "lucide-react";
+import { Users, Plus, Globe, LayoutList, ArrowLeft, Send, MessageCircle, Image, Video, Music, X, Loader2 } from "lucide-react";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { NestedReplies } from "@/components/shared/NestedReplies";
 
@@ -27,6 +27,13 @@ export default function CommunityPage() {
   const [newPostContent, setNewPostContent] = useState("");
   const [isPostingToCommunity, setIsPostingToCommunity] = useState(false);
   const [loadingCommunityPosts, setLoadingCommunityPosts] = useState(false);
+
+  // Media upload
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"image" | "video" | "audio" | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchCommunities();
@@ -83,14 +90,12 @@ export default function CommunityPage() {
     }
   };
 
-  // Open community feed
   const openCommunity = (community: any) => {
     setSelectedCommunity(community);
     setLoadingCommunityPosts(true);
     setCommunityPosts([]);
   };
 
-  // Load posts for selected community
   useEffect(() => {
     if (!selectedCommunity) return;
     
@@ -108,24 +113,82 @@ export default function CommunityPage() {
     return () => unsub();
   }, [selectedCommunity]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type.startsWith("image/")) {
+      setMediaType("image");
+      setMediaPreview(URL.createObjectURL(file));
+    } else if (file.type.startsWith("video/")) {
+      setMediaType("video");
+      setMediaPreview(URL.createObjectURL(file));
+    } else if (file.type.startsWith("audio/")) {
+      setMediaType("audio");
+      setMediaPreview(null);
+    } else {
+      alert("Unsupported file type. Use image, video, or audio.");
+      return;
+    }
+    setMediaFile(file);
+  };
+
+  const clearMedia = () => {
+    setMediaFile(null);
+    setMediaPreview(null);
+    setMediaType(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadToCloudinary = async (file: File): Promise<string> => {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    if (!cloudName || !uploadPreset) throw new Error("Cloudinary not configured");
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", uploadPreset);
+
+    const resourceType = file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "video" : "image";
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (!data.secure_url) throw new Error("Upload failed");
+    return data.secure_url;
+  };
+
   const handlePostToCommunity = async () => {
-    if (!newPostContent.trim() || !user || !selectedCommunity) return;
+    if ((!newPostContent.trim() && !mediaFile) || !user || !selectedCommunity) return;
     setIsPostingToCommunity(true);
+    setIsUploading(!!mediaFile);
     try {
+      let mediaUrl = "";
+      let postMediaType = "";
+      if (mediaFile) {
+        mediaUrl = await uploadToCloudinary(mediaFile);
+        postMediaType = mediaType || "";
+      }
+
       await addDoc(collection(db, "community_posts"), {
         communityId: selectedCommunity.id,
         communityName: selectedCommunity.name,
         userId: user.uid,
         username: user.displayName || "Variant",
         content: newPostContent,
+        mediaUrl,
+        mediaType: postMediaType,
         createdAt: serverTimestamp(),
       });
       setNewPostContent("");
+      clearMedia();
     } catch (err) {
       console.error(err);
       alert("Failed to post");
     } finally {
       setIsPostingToCommunity(false);
+      setIsUploading(false);
     }
   };
 
@@ -134,7 +197,7 @@ export default function CommunityPage() {
   const yours = communities.filter(c => c.members?.includes(user.uid) || c.ownerId === user.uid);
   const discover = communities.filter(c => !c.members?.includes(user.uid) && c.ownerId !== user.uid);
 
-  // If a community is selected, show its feed
+  // Community Feed View
   if (selectedCommunity) {
     return (
       <div className="flex flex-col min-h-screen pt-8 px-4 max-w-4xl mx-auto w-full gap-6">
@@ -145,7 +208,6 @@ export default function CommunityPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Communities
         </button>
 
-        {/* Community Header */}
         <div className="bg-gradient-to-br from-brand/10 to-surface rounded-3xl p-8 border border-brand/20">
           <h1 className="text-3xl font-bold text-brand mb-2">{selectedCommunity.name}</h1>
           <p className="text-zinc-400 text-sm mb-4">{selectedCommunity.description}</p>
@@ -166,15 +228,54 @@ export default function CommunityPage() {
                 placeholder={`Share something with ${selectedCommunity.name}...`}
                 className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand resize-none min-h-[80px]"
               />
-              <Button 
-                onClick={handlePostToCommunity}
-                disabled={!newPostContent.trim() || isPostingToCommunity}
-                size="sm"
-                className="self-end gap-2"
-              >
-                <Send className="w-4 h-4" />
-                {isPostingToCommunity ? "Posting..." : "Post"}
-              </Button>
+
+              {/* Media Preview */}
+              {mediaFile && (
+                <div className="relative rounded-xl overflow-hidden bg-black max-h-60">
+                  {mediaType === "image" && mediaPreview && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={mediaPreview} alt="Preview" className="w-full h-auto max-h-60 object-contain" />
+                  )}
+                  {mediaType === "video" && mediaPreview && (
+                    <video src={mediaPreview} className="w-full max-h-60" controls />
+                  )}
+                  {mediaType === "audio" && (
+                    <div className="p-4 flex items-center gap-3 bg-surface">
+                      <Music className="w-6 h-6 text-brand" />
+                      <span className="text-sm text-zinc-300 truncate">{mediaFile.name}</span>
+                    </div>
+                  )}
+                  <button onClick={clearMedia} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center hover:bg-red-500 transition-colors">
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                {/* Media buttons */}
+                <div className="flex gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-brand transition-colors px-3 py-1.5 rounded-lg bg-background border border-border">
+                    <Image className="w-3.5 h-3.5" /> Media
+                  </button>
+                </div>
+
+                <Button 
+                  onClick={handlePostToCommunity}
+                  disabled={(!newPostContent.trim() && !mediaFile) || isPostingToCommunity}
+                  size="sm"
+                  className="gap-2"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {isPostingToCommunity ? (isUploading ? "Uploading..." : "Posting...") : "Post"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -206,9 +307,27 @@ export default function CommunityPage() {
                         }) || "Just now"}
                       </span>
                     </div>
-                    <p className="text-sm text-zinc-200 mt-1">{post.content}</p>
+                    {post.content && <p className="text-sm text-zinc-200 mt-1">{post.content}</p>}
+
+                    {/* Media Display */}
+                    {post.mediaUrl && (
+                      <div className="mt-3 rounded-xl overflow-hidden bg-black">
+                        {post.mediaType === "image" && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={post.mediaUrl} alt="Post media" className="w-full h-auto max-h-[400px] object-cover" />
+                        )}
+                        {post.mediaType === "video" && (
+                          <video src={post.mediaUrl} className="w-full max-h-[400px]" controls />
+                        )}
+                        {post.mediaType === "audio" && (
+                          <div className="p-4 flex items-center gap-3 bg-surface rounded-xl">
+                            <Music className="w-6 h-6 text-brand flex-shrink-0" />
+                            <audio src={post.mediaUrl} controls className="w-full" />
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
-                    {/* Nested replies for community post */}
                     <NestedReplies
                       collectionPath={`communities/${selectedCommunity.id}/posts/${post.id}/replies`}
                       notifyUserId={post.userId}
@@ -231,25 +350,13 @@ export default function CommunityPage() {
       <h1 className="text-3xl font-bold">Community Hub</h1>
 
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
-        <Button 
-          variant={activeTab === "join" ? "default" : "outline"} 
-          onClick={() => setActiveTab("join")}
-          className="rounded-full gap-2 whitespace-nowrap"
-        >
+        <Button variant={activeTab === "join" ? "default" : "outline"} onClick={() => setActiveTab("join")} className="rounded-full gap-2 whitespace-nowrap">
           <Globe className="w-4 h-4" /> Join Community
         </Button>
-        <Button 
-          variant={activeTab === "create" ? "default" : "outline"} 
-          onClick={() => setActiveTab("create")}
-          className="rounded-full gap-2 whitespace-nowrap"
-        >
+        <Button variant={activeTab === "create" ? "default" : "outline"} onClick={() => setActiveTab("create")} className="rounded-full gap-2 whitespace-nowrap">
           <Plus className="w-4 h-4" /> Create Community
         </Button>
-        <Button 
-          variant={activeTab === "joined" ? "default" : "outline"} 
-          onClick={() => setActiveTab("joined")}
-          className="rounded-full gap-2 whitespace-nowrap"
-        >
+        <Button variant={activeTab === "joined" ? "default" : "outline"} onClick={() => setActiveTab("joined")} className="rounded-full gap-2 whitespace-nowrap">
           <Users className="w-4 h-4" /> Joined Communities
         </Button>
       </div>
@@ -257,7 +364,6 @@ export default function CommunityPage() {
       <div className="flex-1">
         {loading && <p className="text-zinc-500">Loading communities...</p>}
         
-        {/* Join Community Tab (Discover) */}
         {!loading && activeTab === "join" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {discover.length === 0 ? (
@@ -275,29 +381,17 @@ export default function CommunityPage() {
           </div>
         )}
 
-        {/* Create Community Tab */}
         {!loading && activeTab === "create" && (
           <div className="bg-surface p-6 rounded-2xl border border-border max-w-md">
             <h2 className="text-xl font-bold mb-4">Create a New Community</h2>
             <div className="flex flex-col gap-4">
               <div>
                 <label className="text-sm text-zinc-400 mb-1 block">Community Name</label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-background border border-border rounded-xl px-4 py-2 focus:border-brand focus:outline-none"
-                  placeholder="e.g. Iron Lifters"
-                />
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-background border border-border rounded-xl px-4 py-2 focus:border-brand focus:outline-none" placeholder="e.g. Iron Lifters" />
               </div>
               <div>
                 <label className="text-sm text-zinc-400 mb-1 block">Description</label>
-                <textarea 
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-background border border-border rounded-xl px-4 py-2 focus:border-brand focus:outline-none resize-none h-24"
-                  placeholder="What is this community about?"
-                />
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-background border border-border rounded-xl px-4 py-2 focus:border-brand focus:outline-none resize-none h-24" placeholder="What is this community about?" />
               </div>
               <Button disabled={!name || !description || isCreating} onClick={handleCreateCommunity} className="w-full font-bold">
                 {isCreating ? "Creating..." : "Create Community"}
@@ -306,7 +400,6 @@ export default function CommunityPage() {
           </div>
         )}
 
-        {/* Joined Communities Tab */}
         {!loading && activeTab === "joined" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {yours.length === 0 ? (
@@ -320,11 +413,7 @@ export default function CommunityPage() {
                   </div>
                   <p className="text-sm text-zinc-300 line-clamp-2 flex-1">{c.description}</p>
                   <p className="text-xs text-zinc-400">{c.members?.length || 1} Members</p>
-                  <Button 
-                    onClick={() => openCommunity(c)} 
-                    variant="outline" 
-                    className="w-full border-brand/50 text-brand hover:bg-brand hover:text-black font-bold"
-                  >
+                  <Button onClick={() => openCommunity(c)} variant="outline" className="w-full border-brand/50 text-brand hover:bg-brand hover:text-black font-bold">
                     View Community
                   </Button>
                 </div>

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X, MessageCircle } from "lucide-react";
+import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X, MessageCircle, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/feed/PostCard";
 import Link from "next/link";
@@ -24,6 +24,9 @@ export default function PublicProfilePage() {
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [processingRequest, setProcessingRequest] = useState(false);
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const [friendsList, setFriendsList] = useState<any[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -241,10 +244,22 @@ export default function PublicProfilePage() {
               <p className="text-sm text-zinc-400">Workouts</p>
               <p className="text-2xl font-bold text-brand">{profileData?.workoutCount || 0}</p>
             </div>
-            <div className="bg-background rounded-2xl p-4 border border-border">
+            <button onClick={async () => {
+              setShowFriendsModal(true);
+              setLoadingFriends(true);
+              const ids = profileData?.friends || [];
+              try {
+                const results: any[] = [];
+                for (const fid of ids) {
+                  const snap = await getDoc(doc(db, "users", fid));
+                  if (snap.exists()) results.push({ id: fid, ...snap.data() });
+                }
+                setFriendsList(results);
+              } catch {} finally { setLoadingFriends(false); }
+            }} className="bg-background rounded-2xl p-4 border border-border text-left hover:border-brand/50 transition-colors">
               <p className="text-sm text-zinc-400">Friends</p>
               <p className="text-2xl font-bold">{profileData?.friends?.length || 0}</p>
-            </div>
+            </button>
             <div className="bg-background rounded-2xl p-4 border border-border">
               <p className="text-sm text-zinc-400">Posts</p>
               <p className="text-2xl font-bold">{userPosts.length}</p>
@@ -338,6 +353,42 @@ export default function PublicProfilePage() {
           <p className="text-zinc-500">This user hasn&apos;t posted anything yet.</p>
         )}
       </div>
+
+      {/* Friends Modal */}
+      {showFriendsModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowFriendsModal(false)}>
+          <div className="bg-surface border border-border rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Users className="w-5 h-5 text-brand" /> Friends</h2>
+              <button onClick={() => setShowFriendsModal(false)} className="p-2 rounded-full hover:bg-surface-hover"><X className="w-5 h-5" /></button>
+            </div>
+            {loadingFriends ? (
+              <p className="text-zinc-500 text-center py-8">Loading...</p>
+            ) : friendsList.length === 0 ? (
+              <p className="text-zinc-500 text-center py-8">No friends yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {friendsList.map(f => (
+                  <Link key={f.id} href={`/profile/${f.id}`} onClick={() => setShowFriendsModal(false)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-background transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {f.profilePic ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={f.profilePic} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-5 h-5 text-zinc-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{f.username || "Athlete"}</p>
+                      <p className="text-xs text-zinc-500">{f.email}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

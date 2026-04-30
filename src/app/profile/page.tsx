@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { LogOut, Grid3X3, Users, LayoutList, X, Save } from "lucide-react";
+import { LogOut, Grid3X3, Users, LayoutList, X, Save, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { PostCard } from "@/components/feed/PostCard";
 import Link from "next/link";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
@@ -26,6 +27,12 @@ export default function ProfilePage() {
   const [editUsername, setEditUsername] = useState("");
   const [editBio, setEditBio] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Friends / Communities modals
+  const [showFriendsModal, setShowFriendsModal] = useState(false);
+  const [showCommunitiesModal, setShowCommunitiesModal] = useState(false);
+  const [friendsList, setFriendsList] = useState<any[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -95,12 +102,31 @@ export default function ProfilePage() {
         bio: editBio,
       });
       setShowEditModal(false);
-      fetchProfile(); // refresh
+      fetchProfile();
     } catch (err) {
       console.error(err);
       alert("Failed to update profile.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const openFriendsModal = async () => {
+    setShowFriendsModal(true);
+    setLoadingFriends(true);
+    const friendIds = profileData?.friends || [];
+    if (friendIds.length === 0) { setLoadingFriends(false); return; }
+    try {
+      const results: any[] = [];
+      for (const fid of friendIds) {
+        const snap = await getDoc(doc(db, "users", fid));
+        if (snap.exists()) results.push({ id: fid, ...snap.data() });
+      }
+      setFriendsList(results);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingFriends(false);
     }
   };
 
@@ -134,18 +160,18 @@ export default function ProfilePage() {
               <p className="text-xl sm:text-2xl font-bold text-brand">{userPosts.length}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Posts</p>
             </div>
-            <div className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center">
+            <button onClick={openFriendsModal} className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center hover:border-brand/50 transition-colors">
               <p className="text-xl sm:text-2xl font-bold">{profileData?.friends?.length || 0}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Friends</p>
-            </div>
+            </button>
             <div className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center">
               <p className="text-xl sm:text-2xl font-bold text-brand">{profileData?.workoutCount || 0}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Workouts</p>
             </div>
-            <div className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center">
+            <button onClick={() => setShowCommunitiesModal(true)} className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center hover:border-brand/50 transition-colors">
               <p className="text-xl sm:text-2xl font-bold">{userCommunities.length}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Communities</p>
-            </div>
+            </button>
           </div>
 
           <Button variant="outline" className="self-start" onClick={() => setShowEditModal(true)}>Edit Profile</Button>
@@ -236,29 +262,16 @@ export default function ProfilePage() {
           <div className="bg-surface border border-border rounded-3xl p-6 sm:p-8 max-w-md w-full" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Edit Profile</h2>
-              <button onClick={() => setShowEditModal(false)} className="p-2 rounded-full hover:bg-surface-hover">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowEditModal(false)} className="p-2 rounded-full hover:bg-surface-hover"><X className="w-5 h-5" /></button>
             </div>
-
             <div className="flex flex-col gap-4">
               <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Username</label>
-                <input 
-                  type="text" 
-                  value={editUsername} 
-                  onChange={e => setEditUsername(e.target.value)}
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand"
-                />
+                <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand" />
               </div>
               <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">Bio</label>
-                <textarea 
-                  value={editBio} 
-                  onChange={e => setEditBio(e.target.value)}
-                  placeholder="Tell everyone about yourself..."
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand resize-none h-24"
-                />
+                <textarea value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Tell everyone about yourself..." className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand resize-none h-24" />
               </div>
               <p className="text-[10px] text-zinc-500">To change profile photo, hover over the avatar on the profile page.</p>
               <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full bg-brand text-black font-bold rounded-xl gap-2">
@@ -266,6 +279,69 @@ export default function ProfilePage() {
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Friends Modal */}
+      {showFriendsModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowFriendsModal(false)}>
+          <div className="bg-surface border border-border rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Users className="w-5 h-5 text-brand" /> Friends</h2>
+              <button onClick={() => setShowFriendsModal(false)} className="p-2 rounded-full hover:bg-surface-hover"><X className="w-5 h-5" /></button>
+            </div>
+            {loadingFriends ? (
+              <p className="text-zinc-500 text-center py-8">Loading...</p>
+            ) : friendsList.length === 0 ? (
+              <p className="text-zinc-500 text-center py-8">No friends yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {friendsList.map(f => (
+                  <Link key={f.id} href={`/profile/${f.id}`} onClick={() => setShowFriendsModal(false)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-background transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {f.profilePic ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={f.profilePic} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-5 h-5 text-zinc-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{f.username || "Athlete"}</p>
+                      <p className="text-xs text-zinc-500">{f.email}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Communities Modal */}
+      {showCommunitiesModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCommunitiesModal(false)}>
+          <div className="bg-surface border border-border rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2"><Users className="w-5 h-5 text-brand" /> Communities</h2>
+              <button onClick={() => setShowCommunitiesModal(false)} className="p-2 rounded-full hover:bg-surface-hover"><X className="w-5 h-5" /></button>
+            </div>
+            {userCommunities.length === 0 ? (
+              <p className="text-zinc-500 text-center py-8">No communities joined.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {userCommunities.map(c => (
+                  <Link key={c.id} href="/community" onClick={() => setShowCommunitiesModal(false)} className="flex items-center justify-between p-3 rounded-xl hover:bg-background transition-colors">
+                    <div>
+                      <p className="font-bold text-sm">{c.name}</p>
+                      <p className="text-xs text-zinc-500">{c.members?.length || 1} members</p>
+                    </div>
+                    {c.ownerId === user.uid && <span className="text-[10px] text-brand font-bold bg-brand/20 px-2 py-0.5 rounded">Owner</span>}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
