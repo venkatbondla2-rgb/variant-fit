@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Suspense } from "react";
 import { AuthProvider } from "@/context/AuthContext";
 import { Navbar } from "@/components/ui/navbar";
 import "./globals.css";
@@ -17,25 +18,45 @@ export const metadata: Metadata = {
 import { Sidebar } from "@/components/ui/Sidebar";
 import { RightSidebar } from "@/components/ui/RightSidebar";
 import { MobileHeader } from "@/components/ui/MobileHeader";
+import { LoadingWrapper } from "@/components/ui/LoadingWrapper";
+import { SiteFooter } from "@/components/ui/SiteFooter";
+import { SiteHeader } from "@/components/ui/SiteHeader";
+import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt';
+
+import { LayoutMainContent } from "@/components/ui/LayoutMainContent";
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased dark`}>
+      <head>
+        <link rel="manifest" href="/manifest.json?v=6" />
+        <link rel="icon" href="/icon-192.png?v=6" />
+        <link rel="apple-touch-icon" href="/icon-512.png?v=6" />
+        <meta name="theme-color" content="#3b82f6" />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground selection:bg-brand selection:text-black">
         <AuthProvider>
+          <Suspense fallback={null}>
+            <LoadingWrapper />
+          </Suspense>
+          <SiteHeader />
           <MobileHeader />
           <Navbar />
           <Sidebar />
           <RightSidebar />
-          <main className="pb-20 sm:pb-8 pt-20 sm:pt-6 min-h-screen flex flex-col sm:ml-64 xl:mr-80 px-4 md:px-8 max-w-3xl mx-auto w-full transition-all">
+          <LayoutMainContent>
             {children}
-          </main>
+          </LayoutMainContent>
+          <PWAInstallPrompt />
         </AuthProvider>
       </body>
     </html>
   );
+
 }

@@ -1,0 +1,27 @@
+let withPWA;
+try {
+  // CommonJS export (next-pwa < v5)
+  withPWA = require('next-pwa')({
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
+    // optional: disable in development
+    // disable: process.env.NODE_ENV === 'development',
+  });
+} catch (e) {
+  // ESM default export (next-pwa >= v5)
+  withPWA = require('next-pwa').default({
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
+    // optional: disable in development
+    // disable: process.env.NODE_ENV === 'development',
+  });
+}
+
+/** @type {import('next').NextConfig} */
+module.exports = withPWA({
+  reactStrictMode: true,
+  // Enable Turbopack compatibility (empty config)
+  turbopack: {},
+});

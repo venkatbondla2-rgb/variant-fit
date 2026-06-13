@@ -33,7 +33,7 @@ The JSON must follow this exact schema:
         {
           "mealCategory": "breakfast",
           "items": [
-            { "name": "Food item name", "calories": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number> }
+            { "name": "Food item name", "weight": "weight/quantity (e.g. 100g, 2 large eggs, 1 scoop)", "calories": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number> }
           ]
         },
         { "mealCategory": "lunch", "items": [...] },
@@ -52,7 +52,7 @@ CRITICAL RULES:
 - Each day must have DIFFERENT food items but similar macro totals
 - Use creative variety: different proteins, grains, vegetables across days
 - Always include exactly 4 meal categories per day: breakfast, lunch, mid-snack, dinner
-- Each meal should have 2-4 food items
+- Each meal should have 2-4 food items, and each item MUST specify a realistic weight/quantity in the 'weight' field (e.g., '100g', '150g cooked', '2 large')
 - All macro numbers should be realistic integers
 - The dailyTotals should be the target for each day
 - Tailor the plan to the user's goals, allergies, and preferences
@@ -105,7 +105,7 @@ CRITICAL RULES:
             recommendation += `  --- ${catLabel} ---\n`;
             if (meal.items) {
               for (const item of meal.items) {
-                recommendation += `    ${item.name} — ${item.calories} cal | ${item.protein_g}g P | ${item.carbs_g}g C | ${item.fat_g}g F\n`;
+                recommendation += `    ${item.name} ${item.weight ? `(${item.weight})` : ""} — ${item.calories} cal | ${item.protein_g}g P | ${item.carbs_g}g C | ${item.fat_g}g F\n`;
               }
             }
           }

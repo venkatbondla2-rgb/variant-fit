@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VariantFit - Architecture & Scaling Report (10k+ DAU)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 850px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #111;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 20px;
+        }
+        ul {
+            margin-bottom: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .header-info {
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+            color: #555;
+        }
+        .cost-paid {
+            color: #c0392b;
+            font-weight: bold;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 10px;
+            border-left: 4px solid #ffc107;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print" style="background: #e8f4f8; padding: 15px; text-align: center; margin-bottom: 20px; border-radius: 8px; border: 1px solid #b6e0ed;">
+        <strong>Tip:</strong> Press <code>Ctrl + P</code> (or <code>Cmd + P</code> on Mac) and select <strong>"Save as PDF"</strong> to generate your college submission document!
+    </div>
+
+    <h1>VariantFit: Social Fitness Platform</h1>
+    <div class="header-info">
+        <p><strong>Enterprise Architecture & Scaling Cost Analysis Report (10,000+ DAU)</strong></p>
+    </div>
+
+    <div class="highlight">
+        <strong>Important Clarification regarding Workout Posts:</strong><br/>
+        All "Workout Completed", "Personal Record", and "Streak" posts generated automatically in the feed are <strong>100% native HTML/CSS</strong>. They do <em>not</em> generate images and they do <em>not</em> use Cloudinary. They cost exactly <strong>$0</strong> in media storage and consume zero Cloudinary credits.
+    </div>
+
+    <h2>1. Project Overview & Architecture</h2>
+    <p>VariantFit is a modern, full-stack social fitness platform designed to handle thousands of concurrent users. It features real-time messaging, AI-driven diet planning, robust workout tracking, and a dynamic video-driven Reels feed.</p>
+
+    <h2>2. Technology Stack</h2>
+    <ul>
+        <li><strong>Frontend Framework:</strong> Next.js (React) utilizing App Router for static generation and server-side rendering.</li>
+        <li><strong>Language:</strong> TypeScript & JavaScript</li>
+        <li><strong>Styling:</strong> Tailwind CSS</li>
+        <li><strong>Backend & Real-time Database:</strong> Google Firebase (Firestore)</li>
+        <li><strong>Authentication:</strong> Firebase Authentication</li>
+        <li><strong>Media Storage & CDN:</strong> Cloudinary (Optimized image and video delivery)</li>
+    </ul>
+
+    <h2>3. Cloud Infrastructure Cost Estimation for 10,000+ DAU</h2>
+    <p>Scaling a social application to 10,000+ Daily Active Users (DAU) requires moving from Free Tiers to professional/paid SLAs to accommodate high bandwidth and database read/writes.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Plan Required</th>
+                <th>Expected Usage (10k DAU)</th>
+                <th>Estimated Monthly Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Vercel</strong></td>
+                <td>Pro Plan</td>
+                <td>~1TB Bandwidth, high serverless invocations for API routes</td>
+                <td class="cost-paid">~$20.00 / month (Base) + Bandwidth overages</td>
+            </tr>
+            <tr>
+                <td><strong>Firebase (Firestore & Auth)</strong></td>
+                <td>Blaze Plan (Pay-as-you-go)</td>
+                <td>~5M Document Reads/day, ~500k Writes/day, 50GB storage</td>
+                <td class="cost-paid">~$30.00 - $60.00 / month</td>
+            </tr>
+            <tr>
+                <td><strong>Cloudinary (Images & Reels)</strong></td>
+                <td>Plus Plan</td>
+                <td>~225 Credits (225GB Storage / 225GB Bandwidth). High video streaming costs.</td>
+                <td class="cost-paid">~$89.00 / month</td>
+            </tr>
+            <tr>
+                <td><strong>Total Estimated Expenses</strong></td>
+                <td>Production Scale</td>
+                <td>10,000+ Daily Active Users</td>
+                <td class="cost-paid">~$139.00 - $169.00 / month</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Cost Optimization Strategies Implemented</h3>
+    <ul>
+        <li><strong>Native UI Components:</strong> Workout cards and achievements are rendered via code (Tailwind CSS) instead of generating and uploading images, saving massive amounts of Cloudinary credits.</li>
+        <li><strong>Image Compression:</strong> Custom client-side compression (Canvas API) reduces image sizes by up to 80% <em>before</em> they hit Cloudinary limits.</li>
+        <li><strong>Firestore Snapshot Management:</strong> Real-time listeners are tightly scoped and paginated to prevent excessive document reads.</li>
+    </ul>
+
+    <h2>4. Key Features Implemented</h2>
+    <ul>
+        <li><strong>Immersive Social Feed & Reels:</strong> TikTok-style vertical video scrolling with auto-play and double-tap to like.</li>
+        <li><strong>Real-time Chat Engine:</strong> Direct messaging with live updates, friend requests, and clickable shared post links.</li>
+        <li><strong>Comprehensive Fitness Tracking:</strong> Logging workout sets, reps, and calculating real-time calories burned.</li>
+        <li><strong>Privacy & Security:</strong> Public/Private account toggling, friend-only visibility, and role-based access control.</li>
+    </ul>
+
+</body>
+</html>

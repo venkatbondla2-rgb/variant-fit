@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, writeBatch, getDocs, addDoc, serverTimestamp, arrayUnion, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity, UserPlus, UserCheck, Dumbbell, Trash2, X } from "lucide-react";
+import { Bell, CheckCircle2, MessageCircle, Heart, BellRing, Activity, UserPlus, UserCheck, Dumbbell, Trash2, X, Trophy, Flame, Camera, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -157,17 +159,31 @@ export default function NotificationsPage() {
       case "friend_request": return <UserPlus className="w-5 h-5 text-brand" />;
       case "friend_accepted": return <UserCheck className="w-5 h-5 text-green-500" />;
       case "train_request": return <Dumbbell className="w-5 h-5 text-brand" />;
+      case "challenge_join": return <Trophy className="w-5 h-5 text-yellow-400" />;
+      case "streak_reminder": return <Flame className="w-5 h-5 text-orange-400" />;
+      case "workout_share": return <Dumbbell className="w-5 h-5 text-green-400" />;
+      case "message_request": return <MessageCircle className="w-5 h-5 text-blue-400" />;
+      case "transformation": return <Camera className="w-5 h-5 text-purple-400" />;
       default: return <BellRing className="w-5 h-5 text-brand" />;
     }
   };
 
   return (
     <div className="flex flex-col min-h-screen pt-8 px-4 max-w-2xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <Activity className="w-8 h-8 text-brand" />
-          Activity
-        </h1>
+      <div className="flex items-center justify-between mb-8 gap-4">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => router.back()} 
+            className="p-2 -ml-2 rounded-xl bg-surface hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all border border-border/50"
+            title="Go back"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-3xl font-black flex items-center gap-2">
+            <Activity className="w-7 h-7 text-brand" />
+            Activity
+          </h1>
+        </div>
         <div className="flex items-center gap-2">
           {notifications.some(n => !n.read) && (
              <Button variant="outline" size="sm" onClick={markAllAsRead} className="text-xs">

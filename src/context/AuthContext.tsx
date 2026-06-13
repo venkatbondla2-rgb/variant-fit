@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 type AuthContextType = {
@@ -36,6 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
              setUserRole("user");
           }
+          // Update user's lastActiveAt timestamp
+          const nowStr = new Date().toISOString();
+          await setDoc(docRef, { lastActiveAt: nowStr }, { merge: true }).catch(err => {
+            console.error("Failed to update lastActiveAt:", err);
+          });
         } catch(err) {
           console.error("Failed to fetch user role", err);
           setUserRole("user");

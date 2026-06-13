@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Menu, X, Activity, Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Bell, User, MessageCircle, Shield, Search, UserPlus, Clock, UserCheck, Loader2 } from "lucide-react";
+import { Menu, X, Activity, Home, LineChart, Dumbbell, Trophy, HelpCircle, Users, Bell, User, MessageCircle, Shield, Search, UserPlus, Clock, UserCheck, Loader2, Camera, BookOpen, BarChart3, Bookmark, Crown } from "lucide-react";
 import { NotificationBadge } from "@/components/ui/NotificationBadge";
 import { collection, getDocs, addDoc, serverTimestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -18,7 +18,15 @@ export function MobileHeader() {
   const [isSearching, setIsSearching] = useState(false);
   const [sentRequests, setSentRequests] = useState<Set<string>>(new Set());
   const pathname = usePathname();
+  const router = useRouter();
   const { user, userRole } = useAuth();
+
+  const handleBellClick = (e: React.MouseEvent) => {
+    if (pathname === "/notifications") {
+      e.preventDefault();
+      router.back();
+    }
+  };
 
   if (!user) return null;
 
@@ -29,8 +37,13 @@ export function MobileHeader() {
     { href: "/diet", label: "Diet & Nutrition", icon: <Activity className="w-5 h-5" /> },
     { href: "/train", label: "Train with Variant", icon: <Dumbbell className="w-5 h-5" /> },
     { href: "/challenge", label: "Challenge Variants", icon: <Trophy className="w-5 h-5" /> },
+    { href: "/saved", label: "Saved Posts", icon: <Bookmark className="w-5 h-5" /> },
     { href: "/help", label: "Help me Variant", icon: <HelpCircle className="w-5 h-5" /> },
     { href: "/community", label: "Community", icon: <Users className="w-5 h-5" /> },
+    { href: "/progress", label: "Progress Photos", icon: <Camera className="w-5 h-5" /> },
+    { href: "/exercises", label: "Exercise Library", icon: <BookOpen className="w-5 h-5" /> },
+    { href: "/leaderboard", label: "Leaderboard", icon: <BarChart3 className="w-5 h-5" /> },
+    { href: "/premium", label: "Buy Premium", icon: <Crown className="w-5 h-5 text-yellow-400" /> },
   ];
 
   const handleSearch = async () => {
@@ -98,9 +111,10 @@ export function MobileHeader() {
     <>
       {/* Mobile Top App Bar */}
       <div className="sm:hidden fixed top-0 left-0 w-full h-16 bg-background/95 backdrop-blur-md border-b border-border z-50 flex items-center justify-between px-4">
-        <Link href="/feed" className="flex items-center gap-2">
-          <Activity className="w-6 h-6 text-brand" />
-          <span className="font-bold text-lg tracking-tight">VariantFit</span>
+        <Link href="/feed" className="flex items-center gap-2 group">
+          <div className="bg-black p-1.5 rounded-lg flex items-center justify-center">
+            <img src="/logo.png" alt="VariantFit Logo" className="h-8 w-auto object-contain" />
+          </div>
         </Link>
         <div className="flex items-center gap-2">
           <button 
@@ -109,6 +123,11 @@ export function MobileHeader() {
           >
             <Search className="w-5 h-5" />
           </button>
+          <Link href="/notifications" onClick={handleBellClick} className="p-2 text-zinc-400 hover:text-brand transition-colors">
+            <NotificationBadge>
+              <Bell className="w-5 h-5" />
+            </NotificationBadge>
+          </Link>
           <button 
             onClick={() => setIsOpen(true)}
             className="p-2 -mr-2 bg-transparent border-none text-white hover:text-brand transition-colors"
@@ -173,9 +192,10 @@ export function MobileHeader() {
          className={`fixed top-0 left-0 h-full w-[280px] bg-background border-r border-border z-[70] transform transition-transform duration-300 ease-in-out sm:hidden flex flex-col p-6 overflow-y-auto ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex items-center justify-between mb-8">
-            <Link href="/feed" className="flex items-center gap-2" onClick={() => setIsOpen(false)}>
-              <Activity className="w-8 h-8 text-brand" />
-              <span className="font-bold text-xl tracking-tight">VariantFit</span>
+            <Link href="/feed" className="flex items-center gap-2 group" onClick={() => setIsOpen(false)}>
+              <div className="bg-black p-1.5 rounded-lg flex items-center justify-center">
+                <img src="/logo.png" alt="VariantFit Logo" className="h-8 w-auto object-contain" />
+              </div>
             </Link>
             <button onClick={() => setIsOpen(false)} className="p-2 text-zinc-400 hover:text-white bg-surface rounded-full">
               <X className="w-5 h-5" />
@@ -216,12 +236,6 @@ export function MobileHeader() {
 
         <div className="mt-6 border-t border-border pt-6 pb-20 flex flex-col gap-2">
            <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Account</div>
-           <Link href="/notifications" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/notifications" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300"}`}>
-              <NotificationBadge>
-                <Bell className="w-5 h-5"/>
-              </NotificationBadge>
-              <span className="text-sm">Activity</span>
-           </Link>
            <Link href="/profile" onClick={() => setIsOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${pathname === "/profile" ? "bg-brand/10 text-brand font-medium" : "text-zinc-300 hover:text-white"}`}>
               <User className="w-5 h-5"/>
               <span className="text-sm">Profile</span>

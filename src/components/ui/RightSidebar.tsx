@@ -4,14 +4,20 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { UserPlus, Search, Loader2, Clock, UserCheck } from "lucide-react";
-import { collection, query, limit, onSnapshot, getDocs, addDoc, serverTimestamp, where } from "firebase/firestore";
+import { collection, query, limit, onSnapshot, getDocs, addDoc, serverTimestamp, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { AdCard } from "@/components/feed/AdCard";
+import { StreakBadge } from "@/components/ui/StreakBadge";
 import Link from "next/link";
+
+import { usePathname } from "next/navigation";
 
 export function RightSidebar() {
   const { user } = useAuth();
+  const pathname = usePathname();
+  
+  if (pathname === "/messages") return null;
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,6 +56,13 @@ export function RightSidebar() {
         const sentSnap = await getDocs(sentQuery);
         const sentIds = new Set(sentSnap.docs.map(d => (d.data() as any).toId));
         setSentRequests(sentIds);
+
+        // Get user's friend list
+        const myDoc = await getDoc(doc(db, "users", user.uid));
+        if (myDoc.exists()) {
+          const myFriends = myDoc.data().friends || [];
+          setFriends(new Set(myFriends));
+        }
       } catch (err) {
         console.error("Error loading friend data:", err);
       }
@@ -137,7 +150,7 @@ export function RightSidebar() {
   if (!user) return null;
 
   return (
-    <div className="hidden xl:flex flex-col w-80 h-screen fixed right-0 top-0 border-l border-border p-6 bg-background/95 backdrop-blur z-40 overflow-y-auto">
+    <div className="hidden xl:flex flex-col w-72 h-[calc(100vh-4rem)] fixed right-0 top-16 border-l border-border p-5 bg-background/95 backdrop-blur z-40 overflow-y-auto">
       
       {/* Search Bar */}
       <div className="mb-8">
@@ -173,8 +186,13 @@ export function RightSidebar() {
         )}
       </div>
 
+      {/* Streak Widget */}
+      <div className="mb-6">
+        <StreakBadge variant="full" />
+      </div>
+
       {/* Suggested Variants (Friend Recommendations) */}
-      <div className="mb-8 p-5 bg-surface rounded-3xl border border-border shadow-sm">
+      <div className="mb-6 p-4 bg-surface rounded-3xl border border-border shadow-sm">
         <h3 className="font-bold text-sm mb-4">Live Variants</h3>
         <div className="flex flex-col gap-4">
           {suggestions.length === 0 && <p className="text-xs text-zinc-500">No other variants yet.</p>}

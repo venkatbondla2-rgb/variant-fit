@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Home, User, Bell } from "lucide-react";
+import { MessageCircle, Home, User, Film, Activity } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 export function Navbar() {
@@ -15,8 +15,9 @@ export function Navbar() {
     <nav className="fixed bottom-0 left-0 w-full bg-background/95 backdrop-blur-md border-t border-border z-50 sm:hidden">
       <div className="flex items-center justify-around w-full h-16 px-2">
         <NavLink href="/feed" icon={<Home className="w-6 h-6" />} label="Feed" active={pathname === "/feed"} />
+        <NavLink href="/vites" icon={<Film className="w-6 h-6" />} label="Vites" active={pathname === "/vites"} />
         <NavLink href="/track" icon={<Activity className="w-6 h-6" />} label="Track" active={pathname === "/track"} />
-        <NavLink href="/notifications" icon={<Bell className="w-6 h-6" />} label="Activity" active={pathname === "/notifications"} />
+        <NavLink href="/messages" icon={<MessageCircle className="w-6 h-6" />} label="Messages" active={pathname === "/messages"} />
         <NavLink href="/profile" icon={<User className="w-6 h-6" />} label="Profile" active={pathname === "/profile"} />
       </div>
     </nav>

@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { doc, getDoc, collection, query, where, orderBy, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { LogOut, Grid3X3, Users, LayoutList, X, Save, User as UserIcon } from "lucide-react";
+import { LogOut, Grid3X3, Users, LayoutList, X, Save, User as UserIcon, Globe, Lock, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { PostCard } from "@/components/feed/PostCard";
 import Link from "next/link";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { BadgeShowcase } from "@/components/profile/BadgeShowcase";
+import { VitesViewer } from "@/components/feed/VitesViewer";
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth();
@@ -20,12 +22,13 @@ export default function ProfilePage() {
   const [userCommunities, setUserCommunities] = useState<any[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingCommunities, setLoadingCommunities] = useState(true);
-  const [activeTab, setActiveTab] = useState<"posts" | "communities">("posts");
+  const [activeTab, setActiveTab] = useState<"posts" | "communities" | "progress">("posts");
   
   // Edit profile state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editUsername, setEditUsername] = useState("");
   const [editBio, setEditBio] = useState("");
+  const [editIsPrivate, setEditIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   // Friends / Communities modals
@@ -33,6 +36,9 @@ export default function ProfilePage() {
   const [showCommunitiesModal, setShowCommunitiesModal] = useState(false);
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  
+  // Continuous feed viewer
+  const [activeFeedStartIndex, setActiveFeedStartIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,6 +55,7 @@ export default function ProfilePage() {
         setProfileData(data);
         setEditUsername(data.username || user.displayName || "");
         setEditBio(data.bio || "");
+        setEditIsPrivate(data.isPrivate || false);
       }
     }
   };
@@ -100,6 +107,7 @@ export default function ProfilePage() {
       await updateDoc(doc(db, "users", user.uid), {
         username: editUsername,
         bio: editBio,
+        isPrivate: editIsPrivate,
       });
       setShowEditModal(false);
       fetchProfile();
@@ -139,7 +147,7 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col min-h-screen p-4 sm:p-8 max-w-4xl mx-auto w-full pb-20">
       <header className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Profile</h1>
+        <h1 className="text-2xl font-bold">Profile</h1>
         <Button variant="outline" onClick={logout} className="gap-2">
           <LogOut className="w-4 h-4" />
           Log Out
@@ -151,31 +159,47 @@ export default function ProfilePage() {
         <ProfileAvatar user={user} profileData={profileData} onUpdate={fetchProfile} />
         
         <div className="flex flex-col flex-1 w-full">
-          <h2 className="text-2xl font-bold mb-1">{profileData?.username || user.displayName || "Athlete"}</h2>
+          <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+            {profileData?.username || user.displayName || "Athlete"}
+            {profileData?.isPrivate ? (
+              <span className="inline-flex items-center gap-1 bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">
+                <Lock className="w-3 h-3" /> Private
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 bg-brand/10 border border-brand/20 text-brand text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">
+                <Globe className="w-3 h-3" /> Public
+              </span>
+            )}
+          </h2>
           <p className="text-zinc-400 mb-2">{user.email}</p>
           {profileData?.bio && <p className="text-sm text-zinc-300 mb-4">{profileData.bio}</p>}
           
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <div className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center">
-              <p className="text-xl sm:text-2xl font-bold text-brand">{userPosts.length}</p>
+              <p className="text-lg font-bold text-brand">{userPosts.length}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Posts</p>
             </div>
             <button onClick={openFriendsModal} className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center hover:border-brand/50 transition-colors">
-              <p className="text-xl sm:text-2xl font-bold">{profileData?.friends?.length || 0}</p>
-              <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Friends</p>
+              <p className="text-lg font-bold">{profileData?.friends?.length || 0}</p>
+              <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Variants</p>
             </button>
             <div className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center">
-              <p className="text-xl sm:text-2xl font-bold text-brand">{profileData?.workoutCount || 0}</p>
+              <p className="text-lg font-bold text-brand">{profileData?.workoutCount || 0}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Workouts</p>
             </div>
             <button onClick={() => setShowCommunitiesModal(true)} className="bg-background rounded-2xl p-3 sm:p-4 border border-border text-center hover:border-brand/50 transition-colors">
-              <p className="text-xl sm:text-2xl font-bold">{userCommunities.length}</p>
+              <p className="text-lg font-bold">{userCommunities.length}</p>
               <p className="text-[10px] sm:text-xs text-zinc-400 mt-1">Communities</p>
             </button>
           </div>
 
           <Button variant="outline" className="self-start" onClick={() => setShowEditModal(true)}>Edit Profile</Button>
         </div>
+      </div>
+
+      {/* Achievement Badges */}
+      <div className="mb-8">
+        <BadgeShowcase />
       </div>
 
       {/* Tab Navigation */}
@@ -200,6 +224,16 @@ export default function ProfilePage() {
         >
           <Users className="w-4 h-4" /> Communities
         </button>
+        <button
+          onClick={() => setActiveTab("progress")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            activeTab === "progress"
+              ? "bg-brand text-black"
+              : "text-zinc-400 hover:text-white hover:bg-surface-hover"
+          }`}
+        >
+          <Camera className="w-4 h-4" /> Progress
+        </button>
       </div>
 
       {/* Posts Grid Tab */}
@@ -209,8 +243,10 @@ export default function ProfilePage() {
             <p className="text-zinc-500">Loading posts...</p>
           ) : userPosts.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {userPosts.map(post => (
-                <PostCard key={post.id} post={post} compact />
+              {userPosts.map((post, idx) => (
+                <div key={post.id} onClick={() => setActiveFeedStartIndex(idx)} className="cursor-pointer">
+                  <PostCard post={post} compact />
+                </div>
               ))}
             </div>
           ) : (
@@ -256,6 +292,17 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Progress Tab */}
+      {activeTab === "progress" && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Camera className="w-12 h-12 text-zinc-600 mb-3" />
+          <p className="text-zinc-400 mb-3">Track your transformation journey</p>
+          <a href="/progress" className="bg-brand text-black text-sm font-bold px-5 py-2.5 rounded-full hover:brightness-110 transition-all">
+            View Progress Photos
+          </a>
+        </div>
+      )}
+
       {/* Edit Profile Modal */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowEditModal(false)}>
@@ -274,6 +321,34 @@ export default function ProfilePage() {
                 <textarea value={editBio} onChange={e => setEditBio(e.target.value)} placeholder="Tell everyone about yourself..." className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand resize-none h-24" />
               </div>
               <p className="text-[10px] text-zinc-500">To change profile photo, hover over the avatar on the profile page.</p>
+
+              {/* Privacy Toggle */}
+              <div>
+                <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Account Visibility</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditIsPrivate(false)}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                      !editIsPrivate ? "bg-brand/10 border-brand text-brand" : "bg-background border-border text-zinc-400 hover:border-zinc-500"
+                    }`}
+                  >
+                    <Globe className="w-4 h-4" /> Public
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditIsPrivate(true)}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                      editIsPrivate ? "bg-orange-500/10 border-orange-500 text-orange-400" : "bg-background border-border text-zinc-400 hover:border-zinc-500"
+                    }`}
+                  >
+                    <Lock className="w-4 h-4" /> Private
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-600 mt-1">
+                  {editIsPrivate ? "Only friends can see your posts and stats." : "Everyone can see your profile."}
+                </p>
+              </div>
               <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full bg-brand text-black font-bold rounded-xl gap-2">
                 <Save className="w-4 h-4" />
                 {isSaving ? "Saving..." : "Save Changes"}
@@ -344,6 +419,15 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Continuous Feed Viewer */}
+      {activeFeedStartIndex !== null && (
+        <VitesViewer 
+          posts={userPosts}
+          startIndex={activeFeedStartIndex}
+          onClose={() => setActiveFeedStartIndex(null)}
+        />
       )}
     </div>
   );

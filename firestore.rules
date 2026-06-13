@@ -27,14 +27,16 @@ service cloud.firestore {
 
     // 2. Workouts Collection (Track)
     match /workouts/{workoutId} {
-      allow read, create, update, delete: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if isOwner(resource.data.userId); 
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // 3. Diet Logs Collection
     match /diet_logs/{logId} {
-      allow read, create, update, delete: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if isOwner(resource.data.userId); 
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // 4. Questions Collection (Help)
@@ -78,15 +80,46 @@ service cloud.firestore {
       }
     }
 
+    // Root messages collection for Direct Shares
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+    }
+
     // 8. Users Collection (Profile)
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create, delete: if isOwner(userId);
-      // Allow owner full write. Allow other authenticated users to update (for friends array).
       allow update: if isAuthenticated();
 
-      // Diet plan templates (auto-populate daily)
+      // Diet plan templates
       match /diet_templates/{templateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Workout plan subcollection
+      match /workout_plan/{dayId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Dated workouts subcollection
+      match /dated_workouts/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Feedback subcollection
+      match /feedback/{feedbackId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Weight History subcollection
+      match /weightHistory/{historyId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Water logs subcollection
+      match /water_logs/{dateId} {
         allow read, write: if isOwner(userId);
       }
     }
@@ -126,8 +159,36 @@ service cloud.firestore {
 
     // 14. Activity Logs (Step Counter)
     match /activity_logs/{logId} {
-      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // 15. Settings Collection (Admin: payments, config)
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // 16. Payment Requests Collection
+    match /payment_requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated();
+    }
+
+    // 17. Streaks Collection (Daily Streaks)
+    match /streaks/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // 18. Progress Photos Collection
+    match /progress_photos/{photoId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
 }

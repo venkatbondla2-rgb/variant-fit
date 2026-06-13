@@ -7,9 +7,11 @@ import { db } from "@/lib/firebase";
 import { Search, Loader2, Dumbbell, UserPlus, Play, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { useRouter } from "next/navigation";
 
 export default function TrainPage() {
   const { user } = useAuth();
+  const router = useRouter();
   
   const [usersQuery, setUsersQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -25,19 +27,45 @@ export default function TrainPage() {
     const qGuest = query(collection(db, "training_sessions"), where("guestId", "==", user.uid));
 
     const unsubscribeHost = onSnapshot(qHost, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      const sessions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => {
+          const tA = a.createdAt?.seconds || 0;
+          const tB = b.createdAt?.seconds || 0;
+          return tB - tA;
+        });
+      
       const active = sessions.find(s => s.status !== "ended");
-      if (active) setActiveSession(active);
-      else if (activeSession?.hostId === user.uid) setActiveSession(null);
+      if (active) {
+        setActiveSession(active);
+      } else {
+        setActiveSession((prev: any) => {
+          if (prev && prev.hostId === user.uid) return null;
+          return prev;
+        });
+      }
     });
 
     const unsubscribeGuest = onSnapshot(qGuest, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      const sessions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => {
+          const tA = a.createdAt?.seconds || 0;
+          const tB = b.createdAt?.seconds || 0;
+          return tB - tA;
+        });
+      
       const active = sessions.find(s => s.status === "active");
       const pending = sessions.filter(s => s.status === "pending");
       
-      if (active) setActiveSession(active);
-      else if (activeSession?.guestId === user.uid) setActiveSession(null);
+      if (active) {
+        setActiveSession(active);
+      } else {
+        setActiveSession((prev: any) => {
+          if (prev && prev.guestId === user.uid) return null;
+          return prev;
+        });
+      }
       
       setIncomingRequests(pending);
     });
@@ -46,7 +74,14 @@ export default function TrainPage() {
       unsubscribeHost();
       unsubscribeGuest();
     };
-  }, [user, activeSession]);
+  }, [user]);
+
+  // Redirect to track page when session is active
+  useEffect(() => {
+    if (activeSession && activeSession.status === "active") {
+      router.push("/track");
+    }
+  }, [activeSession, router]);
 
   const handleSearchUsers = async () => {
     if (!usersQuery.trim() || !user) return;

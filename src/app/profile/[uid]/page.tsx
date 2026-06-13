@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, updateDoc, arrayUnion, arrayRemove, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X, MessageCircle, Users } from "lucide-react";
+import { User as UserIcon, UserPlus, UserCheck, Clock, ArrowLeft, Check, X, MessageCircle, Users, Lock, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/feed/PostCard";
+import { VitesViewer } from "@/components/feed/VitesViewer";
 import Link from "next/link";
 
 export default function PublicProfilePage() {
@@ -27,6 +28,9 @@ export default function PublicProfilePage() {
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
+  
+  const [vitesOpen, setVitesOpen] = useState(false);
+  const [vitesStartIndex, setVitesStartIndex] = useState(0);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -202,6 +206,41 @@ export default function PublicProfilePage() {
     }
   };
 
+  const unfriendUser = async () => {
+    if (!user) return;
+    if (!confirm("Are you sure you want to unfriend this user?")) return;
+    setProcessingRequest(true);
+    try {
+      // 1. Remove friends from each other's lists in Firestore
+      const myRef = doc(db, "users", user.uid);
+      const theirRef = doc(db, "users", uid);
+      
+      await updateDoc(myRef, {
+        friends: arrayRemove(uid)
+      });
+      await updateDoc(theirRef, {
+        friends: arrayRemove(user.uid)
+      });
+
+      // 2. Delete any friend requests between these two users
+      const q1 = query(collection(db, "friend_requests"), where("fromId", "==", user.uid), where("toId", "==", uid));
+      const q2 = query(collection(db, "friend_requests"), where("fromId", "==", uid), where("toId", "==", user.uid));
+      
+      const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const batch = writeBatch(db);
+      snap1.docs.forEach(docSnap => batch.delete(docSnap.ref));
+      snap2.docs.forEach(docSnap => batch.delete(docSnap.ref));
+      await batch.commit();
+
+      setFriendStatus("none");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to unfriend user.");
+    } finally {
+      setProcessingRequest(false);
+    }
+  };
+
   if (authLoading || loadingProfile) {
     return <div className="min-h-screen flex items-center justify-center text-zinc-500">Loading profile...</div>;
   }
@@ -217,6 +256,15 @@ export default function PublicProfilePage() {
   }
 
   const currentImage = profileData?.profilePic;
+  
+  const videoPosts = userPosts.filter((p) => p.mediaType === "video" && p.mediaUrl);
+  const handleOpenVites = (postId: string) => {
+    const videoIndex = videoPosts.findIndex((p) => p.id === postId);
+    if (videoIndex >= 0) {
+      setVitesStartIndex(videoIndex);
+      setVitesOpen(true);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen p-8 max-w-4xl mx-auto w-full">
@@ -236,7 +284,18 @@ export default function PublicProfilePage() {
         </div>
 
         <div className="flex flex-col flex-1 w-full">
-          <h2 className="text-2xl font-bold mb-1">{profileData?.username || "Athlete"}</h2>
+          <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+            {profileData?.username || "Athlete"}
+            {profileData?.isPrivate ? (
+              <span className="inline-flex items-center gap-1 bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">
+                <Lock className="w-3 h-3" /> Private
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 bg-brand/10 border border-brand/20 text-brand text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">
+                <Globe className="w-3 h-3" /> Public
+              </span>
+            )}
+          </h2>
           <p className="text-zinc-400 mb-6">{profileData?.email}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -301,9 +360,19 @@ export default function PublicProfilePage() {
             </div>
           )}
           {friendStatus === "friends" && (
-            <Button variant="outline" disabled className="self-start gap-2 text-green-500 border-green-500/30">
-              <UserCheck className="w-4 h-4" /> Friends
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled className="self-start gap-2 text-green-500 border-green-500/30">
+                <UserCheck className="w-4 h-4" /> Friends
+              </Button>
+              <Button
+                variant="outline"
+                onClick={unfriendUser}
+                disabled={processingRequest}
+                className="self-start gap-2 text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/50"
+              >
+                <X className="w-4 h-4" /> Unfriend
+              </Button>
+            </div>
           )}
 
           {/* Message Button - always visible on other profiles */}
@@ -311,27 +380,7 @@ export default function PublicProfilePage() {
             <Button 
               variant="outline" 
               className="self-start gap-2 mt-2"
-              onClick={async () => {
-                // Check for existing chat
-                const { getDocs: gd, collection: col, query: q, where: w, addDoc: ad, serverTimestamp: st } = await import("firebase/firestore");
-                const chatsSnap = await gd(q(col(db, "chats"), w("participants", "array-contains", user.uid)));
-                const existing = chatsSnap.docs.find(d => (d.data() as any).participants?.includes(uid));
-                if (existing) {
-                  router.push("/messages");
-                  return;
-                }
-                // Create new chat
-                const isFriend = friendStatus === "friends";
-                await ad(col(db, "chats"), {
-                  participants: [user.uid, uid],
-                  participantNames: [user.displayName || "Variant", profileData?.username || "Variant"],
-                  status: isFriend ? "active" : "pending",
-                  lastMessageText: "",
-                  lastMessageTime: st(),
-                  createdAt: st(),
-                });
-                router.push("/messages");
-              }}
+              onClick={() => router.push(`/messages?userId=${uid}`)}
             >
               <MessageCircle className="w-4 h-4" /> Message
             </Button>
@@ -339,20 +388,37 @@ export default function PublicProfilePage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6">
-        <h3 className="text-xl font-bold">Posts</h3>
-        {loadingPosts ? (
-          <p className="text-zinc-500">Loading posts...</p>
-        ) : userPosts.length > 0 ? (
-          <div className="flex flex-col gap-6 w-full max-w-2xl">
-            {userPosts.map(post => (
-              <PostCard key={post.id} post={post} />
-            ))}
+      {/* Posts Section - gated by privacy */}
+      {profileData?.isPrivate && friendStatus !== "friends" ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-surface rounded-3xl border border-border">
+          <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center mb-4">
+            <Lock className="w-8 h-8 text-orange-400" />
           </div>
-        ) : (
-          <p className="text-zinc-500">This user hasn&apos;t posted anything yet.</p>
-        )}
-      </div>
+          <h3 className="text-xl font-bold mb-2">This Account is Private</h3>
+          <p className="text-sm text-zinc-400 max-w-sm text-center">
+            Follow this account to see their posts, workout stats, and activity.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <h3 className="text-xl font-bold">Posts</h3>
+          {loadingPosts ? (
+            <p className="text-zinc-500">Loading posts...</p>
+          ) : userPosts.length > 0 ? (
+            <div className="flex flex-col gap-6 w-full max-w-2xl">
+              {userPosts.map(post => (
+                <PostCard 
+                  key={post.id} 
+                  post={post} 
+                  onOpenVites={post.mediaType === "video" ? () => handleOpenVites(post.id) : undefined}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-zinc-500">This user hasn&apos;t posted anything yet.</p>
+          )}
+        </div>
+      )}
 
       {/* Friends Modal */}
       {showFriendsModal && (
@@ -388,6 +454,14 @@ export default function PublicProfilePage() {
             )}
           </div>
         </div>
+      )}
+      {/* Vites Viewer Overlay */}
+      {vitesOpen && videoPosts.length > 0 && (
+        <VitesViewer
+          posts={videoPosts}
+          startIndex={vitesStartIndex}
+          onClose={() => setVitesOpen(false)}
+        />
       )}
     </div>
   );

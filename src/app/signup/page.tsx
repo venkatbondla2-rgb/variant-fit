@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile, signInWithPopup } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, Globe, Lock } from "lucide-react";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,6 +48,7 @@ export default function SignUpPage() {
         email,
         bio: "",
         goals: "",
+        isPrivate,
         createdAt: new Date().toISOString()
       });
 
@@ -75,6 +77,7 @@ export default function SignUpPage() {
           email: user.email,
           bio: "",
           goals: "",
+          isPrivate: false,
           photoURL: user.photoURL || "",
           createdAt: new Date().toISOString(),
         });
@@ -136,6 +139,34 @@ export default function SignUpPage() {
               required 
               minLength={6}
             />
+          </div>
+
+          {/* Account Visibility */}
+          <div>
+            <label className="text-sm font-medium mb-2 block text-zinc-300">Account Visibility</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPrivate(false)}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-bold transition-all ${
+                  !isPrivate ? "bg-brand/10 border-brand text-brand" : "bg-background border-border text-zinc-400 hover:border-zinc-500"
+                }`}
+              >
+                <Globe className="w-4 h-4" /> Public
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPrivate(true)}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-bold transition-all ${
+                  isPrivate ? "bg-orange-500/10 border-orange-500 text-orange-400" : "bg-background border-border text-zinc-400 hover:border-zinc-500"
+                }`}
+              >
+                <Lock className="w-4 h-4" /> Private
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-600 mt-1.5">
+              {isPrivate ? "Only friends can see your posts and stats." : "Everyone can see your profile, posts, and stats."}
+            </p>
           </div>
           
           <Button type="submit" disabled={loading} className="w-full mt-2">

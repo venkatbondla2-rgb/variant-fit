@@ -26,13 +26,20 @@ export async function GET(request: Request) {
     const items = data.foods ? data.foods.slice(0, 5).map((food: any) => {
       const getNutrient = (name: string) => {
         const nut = food.foodNutrients.find((n: any) => n.nutrientName.toLowerCase().includes(name.toLowerCase()));
-        return nut ? nut.value : 0;
+        return nut ? Math.round(nut.value) : 0;
       };
+
+      const serving = food.servingSize 
+        ? `${Math.round(food.servingSize)}${food.servingSizeUnit || 'g'}`
+        : "100g";
 
       return {
         name: food.description,
         calories: getNutrient("Energy"),
-        protein_g: getNutrient("Protein")
+        protein_g: getNutrient("Protein"),
+        carbs_g: getNutrient("Carbohydrate"),
+        fat_g: getNutrient("lipid") || getNutrient("fat"),
+        weight: serving
       };
     }) : [];
 
